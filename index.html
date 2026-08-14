@@ -194,6 +194,22 @@
   .pt-cell{padding:8px 11px;font-size:.82rem;color:var(--text);border-right:1px solid var(--border);white-space:nowrap;min-width:90px;max-width:210px;overflow:hidden;text-overflow:ellipsis}
   .pt-cell:last-child{border-right:none}
   .pt-more{text-align:center;color:var(--faint);font-size:.72rem;margin-top:10px;font-family:'DM Mono',monospace}
+  /* editable column rename list */
+  .colrename{display:flex;flex-direction:column;gap:9px;margin-bottom:18px}
+  .colrename .cr{display:flex;align-items:center;gap:11px}
+  .colrename .cr b{font-family:'DM Mono',monospace;font-size:.64rem;color:var(--faint);width:26px;flex:0 0 auto;letter-spacing:.06em;text-align:right}
+  .colrename .cr input{flex:1;padding:9px 11px;font-size:.9rem}
+  /* fields manager */
+  .fld-row{display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid var(--border)}
+  .fld-row:last-child{border-bottom:none}
+  .fld-row input{flex:1;padding:9px 11px;font-size:.92rem}
+  .fld-move{display:flex;flex-direction:column;gap:3px;flex:0 0 auto}
+  .fld-btn{background:var(--bg-3);border:1px solid var(--border);color:var(--muted);border-radius:6px;width:28px;height:18px;cursor:pointer;font-size:.6rem;display:grid;place-items:center;padding:0;line-height:1}
+  .fld-btn:disabled{opacity:.3;cursor:not-allowed}
+  .fld-del{background:var(--danger-bg);border:1px solid rgba(207,113,102,.4);color:var(--danger);border-radius:8px;width:38px;height:40px;cursor:pointer;flex:0 0 auto;font-size:.9rem}
+  /* setup divider */
+  .setup-or{display:flex;align-items:center;gap:12px;margin:16px 0 12px;color:var(--faint);font-family:'DM Mono',monospace;font-size:.66rem;letter-spacing:.2em;text-transform:uppercase}
+  .setup-or::before,.setup-or::after{content:"";height:1px;flex:1;background:var(--border)}
 
   /* ---------- Toast ---------- */
   .toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,80px);z-index:80;background:var(--bg-4);border:1px solid var(--border-str);color:var(--text);padding:12px 18px;border-radius:12px;font-size:.9rem;box-shadow:var(--shadow);opacity:0;transition:transform .25s, opacity .25s;display:flex;align-items:center;gap:9px;max-width:90vw}
@@ -243,6 +259,10 @@
     <div class="row end">
       <button class="btn primary grow" id="saveSetup">Save &amp; continue</button>
     </div>
+    <div class="setup-or"><span>or</span></div>
+    <button class="btn ghost grow" id="setupRestore">⤓ Restore from a backup file</button>
+    <p style="color:var(--faint);font-size:.76rem;margin-top:8px;text-align:center">Move a registry from another phone using its exported <span class="mono">.json</span> backup</p>
+    <input type="file" id="restoreFile" accept=".json,application/json" class="hide"/>
   </div>
 
   <!-- ============ MAIN ============ -->
@@ -269,12 +289,14 @@
         <div class="ic">⤓</div>
         <h3 id="dropTitle">Load membership file</h3>
         <p id="dropSub">Tap to choose an Excel, Word, or PDF file</p>
-        <div class="hint">.xlsx · .csv · .docx · .pdf — tables read automatically, first row = headers</div>
+        <div class="hint">.xlsx · .csv · .docx · .pdf · .json — tables read automatically, first row = headers</div>
       </div>
-      <input type="file" id="file" accept=".xlsx,.xls,.csv,.docx,.pdf" class="hide"/>
+      <input type="file" id="file" accept=".xlsx,.xls,.csv,.docx,.pdf,.json,application/json" class="hide"/>
       <div class="row" id="dataActions" style="margin-top:14px">
         <button class="btn sm ghost" id="addBtn">＋ Add member</button>
+        <button class="btn sm ghost" id="fieldsBtn">⚙ Fields</button>
         <button class="btn sm ghost" id="exportBtn">⤒ Export Excel</button>
+        <button class="btn sm ghost" id="backupBtn">⤓ Backup (JSON)</button>
         <button class="btn sm ghost danger" id="clearBtn">Clear data</button>
       </div>
     </div>
@@ -302,7 +324,6 @@
 <div class="sheet" id="sheet">
   <div class="grab"></div>
   <div class="shead">
-    <div class="av" id="d_av">?</div>
     <div style="flex:1;min-width:0">
       <div class="nm" id="d_name">—</div>
       <div class="sub" id="d_sub"></div>
@@ -326,8 +347,8 @@
   </div>
   <div class="sbody">
     <div id="ip_note" class="ip-note"></div>
-    <div class="ip-label">Columns detected</div>
-    <div class="chips" id="ip_cols"></div>
+    <div class="ip-label">Column names — tap any to rename before importing</div>
+    <div class="colrename" id="ip_cols"></div>
     <div class="ip-label">Preview</div>
     <div class="pt-wrap"><div class="pt" id="ip_table"></div></div>
     <div class="pt-more" id="ip_more"></div>
@@ -335,6 +356,31 @@
   <div class="sfoot">
     <button class="btn ghost" id="ip_cancel2">Cancel</button>
     <button class="btn primary grow" id="ip_btn">Import</button>
+  </div>
+</div>
+
+<!-- ============ FIELDS MANAGER SHEET ============ -->
+<div class="sheet-bg" id="fmBg"></div>
+<div class="sheet" id="fmSheet">
+  <div class="grab"></div>
+  <div class="shead">
+    <div style="flex:1;min-width:0">
+      <div class="nm">Manage fields</div>
+      <div class="sub">Rename, reorder, add or remove columns</div>
+    </div>
+    <button class="closex" id="fm_close">×</button>
+  </div>
+  <div class="sbody">
+    <div id="fm_list"></div>
+    <div class="row" style="margin-top:14px">
+      <input id="fm_new" class="grow" placeholder="New field name" autocomplete="off"/>
+      <button class="btn sm" id="fm_add">Add field</button>
+    </div>
+    <div class="ip-note" style="margin-top:16px">Renaming keeps every member's data intact. Deleting a field removes that column's values for all members.</div>
+  </div>
+  <div class="sfoot">
+    <button class="btn ghost" id="fm_cancel">Cancel</button>
+    <button class="btn primary grow" id="fm_save">Save fields</button>
   </div>
 </div>
 
@@ -472,9 +518,9 @@ function refreshData(){
   $('#st_fields').textContent = fields.length;
   $('#st_upd').textContent = updated ? new Date(updated).toLocaleDateString(undefined,{day:'numeric',month:'short'}) : '—';
   const has = members.length>0;
-  $('#dropTitle').textContent = has ? 'Replace / merge members' : 'Load membership Excel';
-  $('#dropSub').textContent = has ? 'Tap to import another file (adds to the registry)' : 'Tap to choose an Excel, Word, or PDF file';
-  $('#dataActions').classList.toggle('hide', !has);
+  $('#dropTitle').textContent = has ? 'Add more members' : 'Load membership file';
+  $('#dropSub').textContent = has ? 'Import another file — new members are added to the registry' : 'Tap to choose an Excel, Word, PDF, or JSON file';
+  $('#dataActions').classList.toggle('hide', !(has || fields.length>0));
   runSearch();
 }
 
@@ -490,7 +536,8 @@ async function importFile(file){
   const ext=name.slice(name.lastIndexOf('.')+1);
   try{
     let parsed;
-    if(ext==='pdf'){ toast('Reading PDF…'); parsed=await parsePdf(file); }
+    if(ext==='json'){ await importJson(file); return; }
+    else if(ext==='pdf'){ toast('Reading PDF…'); parsed=await parsePdf(file); }
     else if(ext==='docx'){ toast('Reading Word doc…'); parsed=await parseDocx(file); }
     else if(ext==='doc'){ toast('Old .doc isn\u2019t supported — save it as .docx', true); return; }
     else { parsed=await parseExcel(file); }
@@ -595,12 +642,20 @@ async function parsePdf(file){
   return p;
 }
 
-/* --- common: grid (array of arrays) -> {headers, rows} --- */
+/* --- common: grid (array of arrays) -> {headers, rows} ---
+   Header = the fullest row among the first few (skips title/blank rows). */
 function gridToParsed(grid, source){
   if(!grid || !grid.length) return null;
-  const hi=grid.findIndex(r=>r.some(c=>String(c).trim()!==''));
-  if(hi<0) return null;
-  const headers=grid[hi].map(h=>String(h).trim()).map((h,i)=>h||('Column '+(i+1)));
+  const scan=Math.min(grid.length, 8);
+  let hi=-1, best=0;
+  for(let i=0;i<scan;i++){
+    const filled=(grid[i]||[]).filter(c=>String(c).trim()!=='').length;
+    if(filled>best){ best=filled; hi=i; }
+  }
+  if(hi<0 || best===0) return null;
+  const width=grid.reduce((w,r)=>Math.max(w, r?r.length:0), 0);
+  const headers=[];
+  for(let j=0;j<width;j++){ const h=String((grid[hi][j]??'')).trim(); headers.push(h || ('Column '+(j+1))); }
   const rows=[];
   for(let i=hi+1;i<grid.length;i++){
     const r=grid[i]; if(!r || r.every(c=>String(c).trim()==='')) continue;
@@ -609,28 +664,45 @@ function gridToParsed(grid, source){
   if(!rows.length) return null;
   return {headers, rows, source};
 }
+function uniqueNames(arr){
+  const used=new Set(), out=[];
+  arr.forEach(n=>{ let base=String(n||'Field').trim()||'Field', x=base, k=2; while(used.has(x)){ x=base+' ('+(k++)+')'; } used.add(x); out.push(x); });
+  return out;
+}
 
 /* ---------- import review / confirm ---------- */
 let pending=null;
 function stageImport(headers, rows, source, note){
-  pending={headers, rows};
+  pending={headers:headers.slice(), rows};
   $('#ip_src').textContent=source||'File';
   $('#ip_count').textContent=rows.length;
   const noteEl=$('#ip_note'); noteEl.textContent=note||''; noteEl.style.display=note?'':'none';
-  const chips=$('#ip_cols'); chips.innerHTML='';
-  headers.forEach(h=>{ const c=el('span','chip'); c.textContent=h; chips.appendChild(c); });
+  const cols=$('#ip_cols'); cols.innerHTML='';
+  const head=$('#ip_table'); // reference below
+  headers.forEach((h,i)=>{
+    const cr=el('div','cr');
+    const b=el('b'); b.textContent=(i+1);
+    const inp=el('input'); inp.value=h; inp.placeholder='Column '+(i+1);
+    inp.oninput=()=>{ const cell=$('#ip_head_'+i); if(cell) cell.textContent=inp.value||('Column '+(i+1)); };
+    cr.append(b, inp); cols.appendChild(cr);
+  });
   const tbl=$('#ip_table'); tbl.innerHTML='';
-  const head=el('div','pt-row pt-head');
-  headers.forEach(h=>{ const d=el('div','pt-cell'); d.textContent=h; head.appendChild(d); });
-  tbl.appendChild(head);
+  const hrow=el('div','pt-row pt-head');
+  headers.forEach((h,i)=>{ const d=el('div','pt-cell'); d.id='ip_head_'+i; d.textContent=h; hrow.appendChild(d); });
+  tbl.appendChild(hrow);
   rows.slice(0,5).forEach(r=>{ const tr=el('div','pt-row'); r.forEach(v=>{const d=el('div','pt-cell'); d.textContent=v; tr.appendChild(d);}); tbl.appendChild(tr); });
   $('#ip_more').textContent = rows.length>5 ? ('+ '+(rows.length-5)+' more rows') : '';
-  $('#ip_btn').textContent='Add '+rows.length+' member'+(rows.length>1?'s':'');
+  $('#ip_btn').textContent='Import '+rows.length+' member'+(rows.length>1?'s':'');
   openImport();
 }
 function commitImport(){
   if(!pending) return;
-  const {headers, rows}=pending;
+  const inputs=[...$('#ip_cols').querySelectorAll('input')];
+  let headers = inputs.length
+    ? inputs.map((inp,i)=> (inp.value.trim() || pending.headers[i] || ('Column '+(i+1))))
+    : pending.headers.slice();
+  headers = uniqueNames(headers);
+  const rows=pending.rows;
   const merged=[...fields]; headers.forEach(h=>{ if(!merged.includes(h)) merged.push(h); });
   fields=merged;
   rows.forEach(r=>{ const o={__id:uid()}; headers.forEach((h,j)=>o[h]=r[j]||''); members.push(o); });
@@ -645,7 +717,7 @@ $('#ip_cancel2').onclick=closeImport;
 $('#importBg').onclick=closeImport;
 document.addEventListener('keydown',e=>{ if(e.key==='Escape' && $('#importSheet').classList.contains('on')) closeImport(); });
 
-/* ---------- export ---------- */
+/* ---------- Excel export ---------- */
 $('#exportBtn').onclick = ()=>{
   if(!members.length){ toast('Nothing to export', true); return; }
   const data = members.map(m=>{ const o={}; fields.forEach(f=>o[f]=m[f]??''); return o; });
@@ -656,6 +728,91 @@ $('#exportBtn').onclick = ()=>{
   XLSX.writeFile(wb, safe+'_registry.xlsx');
   toast('Exported '+members.length+' members');
 };
+
+/* ---------- JSON backup (full transfer between phones) ---------- */
+$('#backupBtn').onclick = ()=>{
+  const obj={ app:'sadasya', version:1, exportedAt:new Date().toISOString(), society, fields, members };
+  const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob); const a=document.createElement('a');
+  const safe=((society&&society.name)||'sadasya').replace(/[^\w]+/g,'_').slice(0,40);
+  a.href=url; a.download=safe+'_backup.json'; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1500);
+  toast('Backup file downloaded');
+};
+
+/* ---------- JSON import / restore ---------- */
+async function importJson(file){
+  let obj;
+  try{ obj=JSON.parse(await file.text()); }
+  catch(e){ toast('That JSON file isn\u2019t valid', true); return; }
+  if(obj && obj.app==='sadasya' && Array.isArray(obj.members)){
+    if(!confirm('Restore this backup? It will replace the society details and all members currently on this device.')) return;
+    restoreBackup(obj); return;
+  }
+  const recs = Array.isArray(obj) ? obj : (obj && Array.isArray(obj.members) ? obj.members : null);
+  if(!recs || !recs.length){ toast('No member records found in that JSON', true); return; }
+  const headers=[]; recs.forEach(r=> r && typeof r==='object' && Object.keys(r).forEach(k=>{ if(k!=='__id' && !headers.includes(k)) headers.push(k); }));
+  const rows=recs.map(r=> headers.map(h=> (r&&r[h]!=null)? String(r[h]) : ''));
+  stageImport(headers, rows, 'JSON', 'Imported from a JSON export.');
+}
+function restoreBackup(obj){
+  society = obj.society || {name:'My Society', addr:'', reg:''};
+  fields  = Array.isArray(obj.fields) ? obj.fields.slice() : [];
+  members = (obj.members||[]).map(m=> m.__id ? m : {...m, __id:uid()});
+  if(!fields.length && members.length){
+    const s=[]; members.forEach(m=>Object.keys(m).forEach(k=>{ if(k!=='__id' && !s.includes(k)) s.push(k); })); fields=s;
+  }
+  localStorage.setItem(LS.society, JSON.stringify(society));
+  save(); closeImport(); route();
+  toast('Backup restored — '+members.length+' member'+(members.length!==1?'s':''));
+}
+$('#setupRestore').onclick = ()=> $('#restoreFile').click();
+$('#restoreFile').onchange = e=>{ const f=e.target.files[0]; if(f) importJson(f); e.target.value=''; };
+
+/* ---------- fields manager ---------- */
+let fmModel=[];
+function openFieldManager(){
+  fmModel = fields.map(f=>({old:f, name:f}));
+  renderFM();
+  $('#fmBg').classList.add('on'); $('#fmSheet').classList.add('on'); document.body.style.overflow='hidden';
+}
+function closeFM(){ $('#fmBg').classList.remove('on'); $('#fmSheet').classList.remove('on'); document.body.style.overflow=''; }
+function syncFM(){ [...$('#fm_list').querySelectorAll('input')].forEach((inp,i)=>{ if(fmModel[i]) fmModel[i].name=inp.value; }); }
+function renderFM(){
+  const list=$('#fm_list'); list.innerHTML='';
+  if(!fmModel.length){ const e=el('div','empty'); e.textContent='No fields yet — add your first column below.'; list.appendChild(e); }
+  fmModel.forEach((row,i)=>{
+    const r=el('div','fld-row');
+    const mv=el('div','fld-move');
+    const up=el('button','fld-btn'); up.textContent='▲'; up.disabled=(i===0);
+    up.onclick=()=>{ syncFM(); [fmModel[i-1],fmModel[i]]=[fmModel[i],fmModel[i-1]]; renderFM(); };
+    const dn=el('button','fld-btn'); dn.textContent='▼'; dn.disabled=(i===fmModel.length-1);
+    dn.onclick=()=>{ syncFM(); [fmModel[i+1],fmModel[i]]=[fmModel[i],fmModel[i+1]]; renderFM(); };
+    mv.append(up,dn);
+    const inp=el('input'); inp.value=row.name; inp.placeholder='Field name'; inp.oninput=()=>{ fmModel[i].name=inp.value; };
+    const del=el('button','fld-del'); del.textContent='✕'; del.title='Remove field';
+    del.onclick=()=>{ syncFM(); fmModel.splice(i,1); renderFM(); };
+    r.append(mv, inp, del); list.appendChild(r);
+  });
+}
+$('#fm_add').onclick=()=>{ const v=$('#fm_new').value.trim(); if(!v){ $('#fm_new').focus(); return; } syncFM(); fmModel.push({old:null, name:v}); $('#fm_new').value=''; renderFM(); };
+$('#fm_new').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); $('#fm_add').click(); } });
+$('#fm_save').onclick=()=>{
+  syncFM();
+  const kept=fmModel.filter(r=> String(r.name||'').trim()!=='');
+  if(!kept.length){ toast('Keep at least one field', true); return; }
+  const names=uniqueNames(kept.map(r=>r.name.trim()));
+  members = members.map(m=>{
+    const o={__id:m.__id};
+    kept.forEach((r,idx)=>{ o[names[idx]] = (r.old!=null ? (m[r.old]??'') : ''); });
+    return o;
+  });
+  fields = names;
+  save(); refreshData(); closeFM(); toast('Fields updated');
+};
+$('#fm_close').onclick=closeFM; $('#fm_cancel').onclick=closeFM; $('#fmBg').onclick=closeFM;
+$('#fieldsBtn').onclick=openFieldManager;
+document.addEventListener('keydown',e=>{ if(e.key==='Escape' && $('#fmSheet').classList.contains('on')) closeFM(); });
 
 /* ---------- clear ---------- */
 $('#clearBtn').onclick = ()=>{
@@ -693,14 +850,13 @@ function runSearch(){
   box.innerHTML='';
   shown.forEach(m=>{
     const row = el('div','mrow fade');
-    const av = el('div','av'); av.textContent = initials(displayName(m));
-    const info = el('div'); info.style.minWidth='0';
+    const info = el('div'); info.style.minWidth='0'; info.style.flex='1';
     const nm = el('div','nm'); nm.textContent = displayName(m);
     info.appendChild(nm);
     const sub = displaySub(m);
     if(sub){ const s=el('div','sub'); s.textContent=sub; info.appendChild(s); }
     const chev = el('div','chev'); chev.textContent='›';
-    row.append(av, info, chev);
+    row.append(info, chev);
     row.onclick = ()=> openDetail(m.__id);
     box.appendChild(row);
   });
@@ -720,9 +876,8 @@ function openDetail(id){
   openSheet();
 }
 function renderDetail(m){
-  $('#d_av').textContent = initials(displayName(m));
   $('#d_name').textContent = displayName(m);
-  $('#d_sub').textContent = displaySub(m) || (subKey||'');
+  $('#d_sub').textContent = displaySub(m);
   const body=$('#sheetBody'); body.innerHTML='';
   fields.forEach(f=>{
     if(f===nameKey) return; // shown in header
@@ -780,10 +935,10 @@ function deleteMember(id){
 
 /* ---------- add member ---------- */
 $('#addBtn').onclick = ()=>{
-  if(!fields.length){ toast('Import a file first to define the fields', true); return; }
+  if(!fields.length){ toast('First define your fields (columns)', true); openFieldManager(); return; }
   const blank={__id:uid()}; fields.forEach(f=>blank[f]='');
   activeId=blank.__id;
-  $('#d_av').textContent='＋'; $('#d_name').textContent='New member'; $('#d_sub').textContent='';
+  $('#d_name').textContent='New member'; $('#d_sub').textContent='';
   const body=$('#sheetBody'); body.innerHTML='';
   const grid=el('div','editgrid');
   fields.forEach(f=>{
