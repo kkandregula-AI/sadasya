@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#0a0908" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Sadasya" />
+<title>SADASYA — Membership Registry</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}</script>
+<style>
+  :root{
+    --bg:#0a0908; --bg-2:#12100d; --bg-3:#1a1611; --bg-4:#221d16;
+    --gold:#c9a86a; --gold-bright:#e4c88d; --gold-dim:#9a8153;
+    --text:#ece7dd; --muted:#8f877a; --faint:#5c564c;
+    --border:rgba(201,168,106,.14); --border-str:rgba(201,168,106,.28);
+    --danger:#cf7166; --danger-bg:rgba(207,113,102,.12);
+    --ok:#8bb08a;
+    --shadow:0 24px 60px -20px rgba(0,0,0,.75);
+    --r:16px; --r-sm:10px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    background:
+      radial-gradient(1200px 700px at 80% -10%, rgba(201,168,106,.06), transparent 60%),
+      radial-gradient(900px 600px at -10% 100%, rgba(201,168,106,.045), transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:'DM Sans',system-ui,sans-serif;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    min-height:100dvh;
+  }
+  .wrap{max-width:760px;margin:0 auto;padding:22px 18px 120px}
+  .mono{font-family:'DM Mono',monospace}
+  .cinzel{font-family:'Cinzel',serif}
+
+  /* ---------- Header ---------- */
+  .topbar{display:flex;align-items:center;gap:13px;padding:6px 0 20px}
+  .brandmark{width:46px;height:46px;border-radius:12px;flex:0 0 auto;box-shadow:0 8px 22px -8px rgba(201,168,106,.5)}
+  .brandtxt h1{font-family:'Cinzel',serif;font-weight:700;font-size:1.32rem;letter-spacing:.14em;color:var(--gold-bright);line-height:1}
+  .brandtxt p{font-size:.66rem;letter-spacing:.34em;text-transform:uppercase;color:var(--muted);margin-top:5px}
+
+  /* ---------- Cards ---------- */
+  .card{
+    background:linear-gradient(180deg, var(--bg-2), var(--bg));
+    border:1px solid var(--border);
+    border-radius:var(--r);
+    padding:20px;
+    box-shadow:var(--shadow);
+  }
+  .card + .card{margin-top:16px}
+  .eyebrow{font-family:'DM Mono',monospace;font-size:.66rem;letter-spacing:.28em;text-transform:uppercase;color:var(--gold-dim);margin-bottom:14px;display:flex;align-items:center;gap:10px}
+  .eyebrow::before{content:"";width:20px;height:1px;background:var(--gold-dim);opacity:.6}
+
+  /* society banner */
+  .society{
+    background:linear-gradient(160deg, var(--bg-3), var(--bg-2));
+    border:1px solid var(--border-str);
+    border-radius:var(--r);
+    padding:22px 20px;
+    position:relative;
+    overflow:hidden;
+  }
+  .society::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 90% 0%, rgba(201,168,106,.1), transparent 60%);pointer-events:none}
+  .society h2{font-family:'Cinzel',serif;font-size:1.3rem;font-weight:600;color:var(--text);letter-spacing:.02em;line-height:1.25}
+  .society .addr{color:var(--muted);font-size:.9rem;margin-top:8px;max-width:92%}
+  .society .reg{display:inline-flex;align-items:center;gap:8px;margin-top:14px;font-family:'DM Mono',monospace;font-size:.74rem;letter-spacing:.06em;color:var(--gold);background:rgba(201,168,106,.08);border:1px solid var(--border);padding:6px 11px;border-radius:999px}
+  .society .edit{position:absolute;top:16px;right:16px}
+
+  /* ---------- Fields ---------- */
+  label.f{display:block;margin-bottom:14px}
+  label.f > span{display:block;font-family:'DM Mono',monospace;font-size:.68rem;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-bottom:7px}
+  input,textarea,select{
+    width:100%;background:var(--bg);border:1px solid var(--border-str);
+    border-radius:var(--r-sm);color:var(--text);font-family:'DM Sans',sans-serif;
+    font-size:.98rem;padding:12px 14px;transition:border-color .15s, box-shadow .15s;
+  }
+  textarea{resize:vertical;min-height:64px;line-height:1.45}
+  input:focus,textarea:focus,select:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,168,106,.12)}
+  input::placeholder,textarea::placeholder{color:var(--faint)}
+
+  /* ---------- Buttons ---------- */
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    font-family:'DM Sans',sans-serif;font-weight:600;font-size:.92rem;letter-spacing:.01em;
+    border:1px solid var(--border-str);background:var(--bg-3);color:var(--text);
+    padding:12px 18px;border-radius:var(--r-sm);cursor:pointer;transition:transform .08s, background .15s, border-color .15s;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn.primary{background:linear-gradient(180deg,var(--gold-bright),var(--gold));color:#221b0e;border-color:transparent;box-shadow:0 10px 24px -10px rgba(201,168,106,.6)}
+  .btn.primary:hover{background:linear-gradient(180deg,#f0d79d,var(--gold-bright))}
+  .btn.ghost{background:transparent}
+  .btn.danger{background:var(--danger-bg);border-color:rgba(207,113,102,.4);color:var(--danger)}
+  .btn.sm{padding:8px 13px;font-size:.82rem}
+  .btn.icon{padding:9px;width:38px;height:38px}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  .row.end{justify-content:flex-end}
+  .grow{flex:1}
+
+  /* ---------- Import zone ---------- */
+  .drop{
+    border:1.5px dashed var(--border-str);border-radius:var(--r);
+    padding:30px 20px;text-align:center;cursor:pointer;transition:border-color .15s, background .15s;
+    background:rgba(201,168,106,.02);
+  }
+  .drop:hover,.drop.over{border-color:var(--gold);background:rgba(201,168,106,.06)}
+  .drop .ic{font-size:1.6rem;color:var(--gold)}
+  .drop h3{font-family:'Cinzel',serif;font-weight:600;font-size:1.02rem;margin:10px 0 5px;color:var(--text)}
+  .drop p{color:var(--muted);font-size:.84rem}
+  .drop .hint{margin-top:8px;font-family:'DM Mono',monospace;font-size:.68rem;color:var(--faint);letter-spacing:.04em}
+
+  /* ---------- Stats ---------- */
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .stat{background:var(--bg-3);border:1px solid var(--border);border-radius:var(--r-sm);padding:14px 12px;text-align:center}
+  .stat b{display:block;font-family:'DM Mono',monospace;font-size:1.55rem;color:var(--gold-bright);letter-spacing:.02em}
+  .stat span{font-size:.64rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin-top:3px;display:block}
+
+  /* ---------- Search ---------- */
+  .searchbar{position:relative}
+  .searchbar .mag{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--gold);font-size:1rem;pointer-events:none}
+  .searchbar input{padding-left:42px}
+  .clearx{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.1rem;padding:4px 8px}
+
+  .results{margin-top:14px;display:flex;flex-direction:column;gap:9px}
+  .mrow{
+    display:flex;align-items:center;gap:13px;background:var(--bg-3);
+    border:1px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;
+    cursor:pointer;transition:border-color .15s, transform .08s, background .15s;
+  }
+  .mrow:hover{border-color:var(--border-str);background:var(--bg-4)}
+  .mrow:active{transform:scale(.995)}
+  .av{width:40px;height:40px;flex:0 0 auto;border-radius:10px;display:grid;place-items:center;font-family:'Cinzel',serif;font-weight:600;color:#221b0e;background:linear-gradient(150deg,var(--gold-bright),var(--gold-dim));font-size:1rem}
+  .mrow .nm{font-weight:600;font-size:.98rem;color:var(--text);line-height:1.2}
+  .mrow .sub{font-family:'DM Mono',monospace;font-size:.72rem;color:var(--muted);margin-top:3px;letter-spacing:.03em}
+  .mrow .chev{margin-left:auto;color:var(--faint);font-size:1.1rem}
+
+  .empty{text-align:center;color:var(--muted);padding:28px 10px;font-size:.9rem}
+  .empty .ic{font-size:1.7rem;opacity:.5;margin-bottom:8px}
+
+  /* ---------- Detail / modal sheet ---------- */
+  .sheet-bg{position:fixed;inset:0;background:rgba(4,3,2,.72);backdrop-filter:blur(6px);opacity:0;pointer-events:none;transition:opacity .22s;z-index:40}
+  .sheet-bg.on{opacity:1;pointer-events:auto}
+  .sheet{
+    position:fixed;left:0;right:0;bottom:0;z-index:50;
+    max-width:760px;margin:0 auto;
+    background:linear-gradient(180deg,var(--bg-2),var(--bg));
+    border:1px solid var(--border-str);border-bottom:none;
+    border-radius:22px 22px 0 0;
+    transform:translateY(102%);transition:transform .28s cubic-bezier(.22,1,.36,1);
+    max-height:92dvh;display:flex;flex-direction:column;
+    box-shadow:0 -20px 60px -10px rgba(0,0,0,.7);
+  }
+  .sheet.on{transform:translateY(0)}
+  .sheet .grab{width:44px;height:4px;background:var(--faint);border-radius:99px;margin:12px auto 4px;flex:0 0 auto}
+  .sheet .shead{display:flex;align-items:flex-start;gap:14px;padding:10px 20px 16px;border-bottom:1px solid var(--border)}
+  .sheet .shead .av{width:52px;height:52px;border-radius:13px;font-size:1.25rem}
+  .sheet .shead .nm{font-family:'Cinzel',serif;font-weight:600;font-size:1.25rem;line-height:1.2}
+  .sheet .shead .sub{font-family:'DM Mono',monospace;font-size:.74rem;color:var(--gold);margin-top:5px;letter-spacing:.04em}
+  .sheet .sbody{overflow-y:auto;padding:6px 20px 20px}
+  .sheet .sfoot{padding:14px 20px calc(18px + env(safe-area-inset-bottom));border-top:1px solid var(--border);display:flex;gap:10px}
+
+  .kv{display:flex;justify-content:space-between;gap:16px;padding:13px 2px;border-bottom:1px solid var(--border)}
+  .kv:last-child{border-bottom:none}
+  .kv .k{font-family:'DM Mono',monospace;font-size:.68rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);flex:0 0 40%;padding-top:2px}
+  .kv .v{text-align:right;font-size:.96rem;color:var(--text);word-break:break-word;flex:1}
+  .kv .v.blank{color:var(--faint);font-style:italic}
+
+  .closex{margin-left:auto;background:none;border:1px solid var(--border);border-radius:9px;color:var(--muted);width:34px;height:34px;cursor:pointer;font-size:1.1rem;flex:0 0 auto}
+
+  /* edit form fields inside sheet */
+  .editgrid{display:flex;flex-direction:column;gap:2px}
+
+  /* import preview */
+  .chips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:18px}
+  .chip{font-family:'DM Mono',monospace;font-size:.72rem;letter-spacing:.03em;color:var(--gold);background:rgba(201,168,106,.08);border:1px solid var(--border);padding:5px 10px;border-radius:999px}
+  .ip-label{font-family:'DM Mono',monospace;font-size:.66rem;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin:6px 0 9px}
+  .ip-note{background:rgba(201,168,106,.07);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:.82rem;color:var(--gold);margin-bottom:18px;line-height:1.45}
+  .pt-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px;background:var(--bg);-webkit-overflow-scrolling:touch}
+  .pt{min-width:max-content}
+  .pt-row{display:flex;border-bottom:1px solid var(--border)}
+  .pt-row:last-child{border-bottom:none}
+  .pt-head .pt-cell{color:var(--gold-dim);font-family:'DM Mono',monospace;font-size:.62rem;letter-spacing:.1em;text-transform:uppercase}
+  .pt-cell{padding:8px 11px;font-size:.82rem;color:var(--text);border-right:1px solid var(--border);white-space:nowrap;min-width:90px;max-width:210px;overflow:hidden;text-overflow:ellipsis}
+  .pt-cell:last-child{border-right:none}
+  .pt-more{text-align:center;color:var(--faint);font-size:.72rem;margin-top:10px;font-family:'DM Mono',monospace}
+
+  /* ---------- Toast ---------- */
+  .toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,80px);z-index:80;background:var(--bg-4);border:1px solid var(--border-str);color:var(--text);padding:12px 18px;border-radius:12px;font-size:.9rem;box-shadow:var(--shadow);opacity:0;transition:transform .25s, opacity .25s;display:flex;align-items:center;gap:9px;max-width:90vw}
+  .toast.on{transform:translate(-50%,0);opacity:1}
+  .toast .dot{width:8px;height:8px;border-radius:99px;background:var(--gold);flex:0 0 auto}
+  .toast.err .dot{background:var(--danger)}
+
+  /* ---------- Install / footer ---------- */
+  .foot{margin-top:26px;text-align:center;color:var(--faint);font-size:.72rem;line-height:1.7;letter-spacing:.02em}
+  .foot .made{color:var(--gold-dim)}
+  .hide{display:none !important}
+  .fade{animation:fade .35s ease both}
+  @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+  /* install banner */
+  #installBar{position:fixed;left:14px;right:14px;bottom:14px;max-width:732px;margin:0 auto;z-index:30;background:var(--bg-4);border:1px solid var(--border-str);border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:12px;box-shadow:var(--shadow)}
+  #installBar .ib-ic{width:36px;height:36px;border-radius:9px}
+  #installBar .ib-t{flex:1;font-size:.82rem;color:var(--muted)}
+  #installBar .ib-t b{color:var(--text);display:block;font-size:.9rem}
+
+  @media (max-width:420px){
+    .stats{gap:8px}
+    .stat b{font-size:1.3rem}
+    .society .addr{max-width:100%}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none !important;animation:none !important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <canvas id="mark" class="brandmark" width="92" height="92"></canvas>
+    <div class="brandtxt">
+      <h1>SADASYA</h1>
+      <p>Membership Registry</p>
+    </div>
+  </div>
+
+  <!-- ============ SETUP (first run) ============ -->
+  <div id="setup" class="card hide">
+    <div class="eyebrow">One-time setup</div>
+    <h2 class="cinzel" style="font-size:1.15rem;margin-bottom:6px">Register your society</h2>
+    <p style="color:var(--muted);font-size:.88rem;margin-bottom:18px">These details are saved on this device and shown across the registry. You can edit them anytime.</p>
+    <label class="f"><span>Society name</span><input id="s_name" placeholder="e.g. Sree Gouri Seva Sangham" autocomplete="off"/></label>
+    <label class="f"><span>Registered address</span><textarea id="s_addr" placeholder="Full address"></textarea></label>
+    <label class="f"><span>Registration number</span><input id="s_reg" class="mono" placeholder="e.g. 1234/2019" autocomplete="off"/></label>
+    <div class="row end">
+      <button class="btn primary grow" id="saveSetup">Save &amp; continue</button>
+    </div>
+  </div>
+
+  <!-- ============ MAIN ============ -->
+  <div id="main" class="hide">
+
+    <!-- society banner -->
+    <div class="society" id="societyBanner">
+      <button class="btn ghost sm edit" id="editSociety">Edit</button>
+      <h2 id="b_name">—</h2>
+      <div class="addr" id="b_addr"></div>
+      <div class="reg" id="b_reg"></div>
+    </div>
+
+    <!-- import -->
+    <div class="card" style="margin-top:16px">
+      <div class="eyebrow">Members data</div>
+      <div class="stats" id="statsBlk">
+        <div class="stat"><b id="st_total">0</b><span>Members</span></div>
+        <div class="stat"><b id="st_fields">0</b><span>Fields</span></div>
+        <div class="stat"><b id="st_upd">—</b><span>Updated</span></div>
+      </div>
+      <div style="height:14px"></div>
+      <div class="drop" id="drop">
+        <div class="ic">⤓</div>
+        <h3 id="dropTitle">Load membership file</h3>
+        <p id="dropSub">Tap to choose an Excel, Word, or PDF file</p>
+        <div class="hint">.xlsx · .csv · .docx · .pdf — tables read automatically, first row = headers</div>
+      </div>
+      <input type="file" id="file" accept=".xlsx,.xls,.csv,.docx,.pdf" class="hide"/>
+      <div class="row" id="dataActions" style="margin-top:14px">
+        <button class="btn sm ghost" id="addBtn">＋ Add member</button>
+        <button class="btn sm ghost" id="exportBtn">⤒ Export Excel</button>
+        <button class="btn sm ghost danger" id="clearBtn">Clear data</button>
+      </div>
+    </div>
+
+    <!-- search -->
+    <div class="card" style="margin-top:16px">
+      <div class="eyebrow">Search registry</div>
+      <div class="searchbar">
+        <span class="mag">⌕</span>
+        <input id="q" placeholder="Search by name, number, phone, any field…" autocomplete="off"/>
+        <button class="clearx hide" id="clearQ">×</button>
+      </div>
+      <div class="results" id="results"></div>
+    </div>
+
+    <div class="foot">
+      <div>SADASYA · offline-first membership registry · data stays on this device</div>
+      <div class="made" style="margin-top:6px">Designed &amp; Architected by Krishnamurthy Kandregula · Made by Claude</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ DETAIL / EDIT SHEET ============ -->
+<div class="sheet-bg" id="sheetBg"></div>
+<div class="sheet" id="sheet">
+  <div class="grab"></div>
+  <div class="shead">
+    <div class="av" id="d_av">?</div>
+    <div style="flex:1;min-width:0">
+      <div class="nm" id="d_name">—</div>
+      <div class="sub" id="d_sub"></div>
+    </div>
+    <button class="closex" id="closeSheet">×</button>
+  </div>
+  <div class="sbody" id="sheetBody"></div>
+  <div class="sfoot" id="sheetFoot"></div>
+</div>
+
+<!-- ============ IMPORT REVIEW SHEET ============ -->
+<div class="sheet-bg" id="importBg"></div>
+<div class="sheet" id="importSheet">
+  <div class="grab"></div>
+  <div class="shead">
+    <div style="flex:1;min-width:0">
+      <div class="nm">Review import</div>
+      <div class="sub"><span id="ip_src">File</span> · <span id="ip_count">0</span> members found</div>
+    </div>
+    <button class="closex" id="ip_cancel">×</button>
+  </div>
+  <div class="sbody">
+    <div id="ip_note" class="ip-note"></div>
+    <div class="ip-label">Columns detected</div>
+    <div class="chips" id="ip_cols"></div>
+    <div class="ip-label">Preview</div>
+    <div class="pt-wrap"><div class="pt" id="ip_table"></div></div>
+    <div class="pt-more" id="ip_more"></div>
+  </div>
+  <div class="sfoot">
+    <button class="btn ghost" id="ip_cancel2">Cancel</button>
+    <button class="btn primary grow" id="ip_btn">Import</button>
+  </div>
+</div>
+
+<!-- install banner -->
+<div id="installBar" class="hide">
+  <canvas class="ib-ic" width="72" height="72" id="markSmall"></canvas>
+  <div class="ib-t"><b>Install Sadasya</b>Add to your home screen for offline access</div>
+  <button class="btn sm primary" id="installBtn">Install</button>
+  <button class="btn sm ghost" id="dismissInstall">✕</button>
+</div>
+
+<div class="toast" id="toast"><span class="dot"></span><span id="toastMsg"></span></div>
+
+<script>
+/* ============================================================
+   SADASYA — single-file offline-first membership registry
+   Data model in localStorage:
+     sadasya.society = {name, addr, reg}
+     sadasya.members = [{ __id, ...fields }]
+     sadasya.fields  = [ordered header names]
+     sadasya.updated = ISO string
+   ============================================================ */
+const LS = {
+  society:'sadasya.society', members:'sadasya.members',
+  fields:'sadasya.fields', updated:'sadasya.updated'
+};
+const $ = s => document.querySelector(s);
+const el = (t,c)=>{const e=document.createElement(t); if(c)e.className=c; return e;};
+
+let society = load(LS.society) || null;
+let members = load(LS.members) || [];
+let fields  = load(LS.fields)  || [];
+let updated = localStorage.getItem(LS.updated) || null;
+let nameKey = null, subKey = null;
+
+function load(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } }
+function save(){ 
+  localStorage.setItem(LS.members, JSON.stringify(members));
+  localStorage.setItem(LS.fields, JSON.stringify(fields));
+  updated = new Date().toISOString();
+  localStorage.setItem(LS.updated, updated);
+}
+function uid(){ return 'm'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+
+/* ---------- brandmark (canvas icon) ---------- */
+function drawMark(canvas){
+  const c = canvas.getContext('2d'); const S = canvas.width; c.clearRect(0,0,S,S);
+  const r = S*0.22;
+  // rounded dark tile
+  c.fillStyle = '#0a0908';
+  roundRect(c, 0,0,S,S,r); c.fill();
+  // subtle inner glow
+  const g = c.createRadialGradient(S*0.7,S*0.15,0,S*0.5,S*0.5,S*0.8);
+  g.addColorStop(0,'rgba(228,200,141,.16)'); g.addColorStop(1,'rgba(228,200,141,0)');
+  c.fillStyle = g; roundRect(c,0,0,S,S,r); c.fill();
+  // gold ring
+  c.strokeStyle = '#c9a86a'; c.lineWidth = S*0.028;
+  c.beginPath(); c.arc(S/2,S/2,S*0.31,0,Math.PI*2); c.stroke();
+  // community: central node + ring of members
+  const cx=S/2, cy=S/2, R=S*0.31, dot=S*0.052;
+  c.fillStyle='#e4c88d';
+  c.beginPath(); c.arc(cx,cy,dot*1.05,0,Math.PI*2); c.fill();
+  c.fillStyle='#c9a86a';
+  for(let i=0;i<6;i++){
+    const a=-Math.PI/2 + i*(Math.PI*2/6);
+    const x=cx+Math.cos(a)*R, y=cy+Math.sin(a)*R;
+    c.beginPath(); c.arc(x,y,dot,0,Math.PI*2); c.fill();
+    // thin connector
+    c.strokeStyle='rgba(201,168,106,.35)'; c.lineWidth=S*0.012;
+    c.beginPath(); c.moveTo(cx,cy); c.lineTo(x,y); c.stroke();
+  }
+}
+function roundRect(c,x,y,w,h,r){ c.beginPath(); c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath(); }
+drawMark($('#mark')); drawMark($('#markSmall'));
+
+/* ---------- toast ---------- */
+let toastT;
+function toast(msg, err){
+  const t=$('#toast'); $('#toastMsg').textContent=msg;
+  t.classList.toggle('err',!!err); t.classList.add('on');
+  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('on'),2600);
+}
+
+/* ---------- routing between setup / main ---------- */
+function route(){
+  if(!society){ $('#setup').classList.remove('hide'); $('#main').classList.add('hide'); }
+  else { $('#setup').classList.add('hide'); $('#main').classList.remove('hide'); renderSociety(); refreshData(); }
+}
+
+/* ---------- society setup ---------- */
+$('#saveSetup').onclick = ()=>{
+  const name=$('#s_name').value.trim(), addr=$('#s_addr').value.trim(), reg=$('#s_reg').value.trim();
+  if(!name){ toast('Society name is required', true); $('#s_name').focus(); return; }
+  society = {name, addr, reg};
+  localStorage.setItem(LS.society, JSON.stringify(society));
+  toast('Society registered'); route();
+};
+$('#editSociety').onclick = ()=>{
+  $('#s_name').value = society.name||''; $('#s_addr').value = society.addr||''; $('#s_reg').value = society.reg||'';
+  $('#setup').classList.remove('hide'); $('#main').classList.add('hide');
+  $('#setup .cinzel').textContent = 'Edit society details';
+  window.scrollTo({top:0,behavior:'smooth'});
+};
+function renderSociety(){
+  $('#b_name').textContent = society.name || '—';
+  $('#b_addr').textContent = society.addr || '';
+  $('#b_addr').style.display = society.addr ? '' : 'none';
+  const reg=$('#b_reg');
+  if(society.reg){ reg.style.display=''; reg.textContent='Reg. No. '+society.reg; }
+  else reg.style.display='none';
+}
+
+/* ---------- pick display keys ---------- */
+function computeKeys(){
+  if(!fields.length){ nameKey=subKey=null; return; }
+  const low = fields.map(f=>({f, l:String(f).toLowerCase()}));
+  const findBy = (tests)=>{ for(const t of tests){ const hit=low.find(o=>t(o.l)); if(hit) return hit.f; } return null; };
+  nameKey = findBy([
+    l=>l==='name'||l==='member name'||l==='full name',
+    l=>l.includes('name') && !l.includes('father') && !l.includes('spouse') && !l.includes('guardian'),
+    ()=>true
+  ]) || fields[0];
+  subKey = findBy([
+    l=>l.includes('member')&&(l.includes('no')||l.includes('id')||l.includes('#')),
+    l=>l==='id'||l.includes('reg'),
+    l=>l.includes('phone')||l.includes('mobile')||l.includes('contact'),
+  ]);
+  if(subKey===nameKey) subKey=null;
+}
+
+/* ---------- data refresh ---------- */
+function refreshData(){
+  computeKeys();
+  $('#st_total').textContent = members.length;
+  $('#st_fields').textContent = fields.length;
+  $('#st_upd').textContent = updated ? new Date(updated).toLocaleDateString(undefined,{day:'numeric',month:'short'}) : '—';
+  const has = members.length>0;
+  $('#dropTitle').textContent = has ? 'Replace / merge members' : 'Load membership Excel';
+  $('#dropSub').textContent = has ? 'Tap to import another file (adds to the registry)' : 'Tap to choose an Excel, Word, or PDF file';
+  $('#dataActions').classList.toggle('hide', !has);
+  runSearch();
+}
+
+/* ---------- File import (Excel · Word · PDF) ---------- */
+$('#drop').onclick = ()=> $('#file').click();
+['dragover','dragenter'].forEach(ev=>$('#drop').addEventListener(ev,e=>{e.preventDefault();$('#drop').classList.add('over');}));
+['dragleave','drop'].forEach(ev=>$('#drop').addEventListener(ev,e=>{e.preventDefault();$('#drop').classList.remove('over');}));
+$('#drop').addEventListener('drop',e=>{ const f=e.dataTransfer.files[0]; if(f) importFile(f); });
+$('#file').onchange = e=>{ const f=e.target.files[0]; if(f) importFile(f); e.target.value=''; };
+
+async function importFile(file){
+  const name=(file.name||'').toLowerCase();
+  const ext=name.slice(name.lastIndexOf('.')+1);
+  try{
+    let parsed;
+    if(ext==='pdf'){ toast('Reading PDF…'); parsed=await parsePdf(file); }
+    else if(ext==='docx'){ toast('Reading Word doc…'); parsed=await parseDocx(file); }
+    else if(ext==='doc'){ toast('Old .doc isn\u2019t supported — save it as .docx', true); return; }
+    else { parsed=await parseExcel(file); }
+    if(!parsed || !parsed.rows.length){ toast('No member records found in that file', true); return; }
+    stageImport(parsed.headers, parsed.rows, parsed.source, parsed.note);
+  }catch(err){ console.error(err); toast(err.message || 'Could not read that file', true); }
+}
+
+/* --- Excel / CSV --- */
+function parseExcel(file){
+  return new Promise((res,rej)=>{
+    const rd=new FileReader();
+    rd.onload=ev=>{ try{
+      const wb=XLSX.read(ev.target.result,{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const grid=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,defval:''});
+      const p=gridToParsed(grid,'Excel'); if(!p) return rej(new Error('That sheet looks empty'));
+      res(p);
+    }catch(e){ rej(new Error('Could not read that spreadsheet')); } };
+    rd.onerror=()=>rej(new Error('Could not read the file'));
+    rd.readAsArrayBuffer(file);
+  });
+}
+
+/* --- Word (.docx): first/largest table, else labelled paragraphs --- */
+async function parseDocx(file){
+  if(typeof mammoth==='undefined') throw new Error('Word reader still loading — try again in a moment');
+  const buf=await file.arrayBuffer();
+  const {value:html}=await mammoth.convertToHtml({arrayBuffer:buf});
+  const doc=new DOMParser().parseFromString(html,'text/html');
+  const tables=[...doc.querySelectorAll('table')];
+  if(tables.length){
+    tables.sort((a,b)=>b.rows.length-a.rows.length);
+    const grid=[...tables[0].rows].map(tr=>[...tr.cells].map(td=>td.textContent.trim()));
+    const p=gridToParsed(grid,'Word');
+    if(p) return p;
+  }
+  // fallback: "Field: Value" lines, blank line separates members
+  const paras=[...doc.querySelectorAll('p,li')].map(p=>p.textContent.trim());
+  const recs=[]; let cur={};
+  const push=()=>{ if(Object.keys(cur).length){ recs.push(cur); cur={}; } };
+  for(const line of paras){
+    if(!line){ push(); continue; }
+    const m=line.match(/^([^:\uFF1A]{1,40})[:\uFF1A]\s*(.+)$/);
+    if(m) cur[m[1].trim()]=m[2].trim();
+  }
+  push();
+  if(!recs.length) throw new Error('No table or labelled details found in that document');
+  const headers=[]; recs.forEach(r=>Object.keys(r).forEach(k=>{ if(!headers.includes(k)) headers.push(k); }));
+  const rows=recs.map(r=>headers.map(h=>r[h]||''));
+  return {headers, rows, source:'Word', note:'Parsed from labelled paragraphs — please verify the columns.'};
+}
+
+/* --- PDF: reconstruct rows & columns from positioned text --- */
+async function parsePdf(file){
+  if(typeof pdfjsLib==='undefined') throw new Error('PDF reader still loading — try again in a moment');
+  const buf=await file.arrayBuffer();
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+  const allLines=[];
+  for(let pg=1;pg<=pdf.numPages;pg++){
+    const page=await pdf.getPage(pg);
+    const tc=await page.getTextContent();
+    const items=tc.items.filter(it=>it.str.trim()!=='').map(it=>({x:it.transform[4],y:it.transform[5],w:it.width||0,s:it.str.trim()}));
+    if(!items.length) continue;
+    items.sort((a,b)=> b.y-a.y || a.x-b.x);
+    let cur=[],lastY=null; const yTol=3;
+    for(const it of items){
+      if(lastY!==null && Math.abs(it.y-lastY)>yTol){ allLines.push(cur); cur=[]; }
+      cur.push(it); lastY=it.y;
+    }
+    if(cur.length) allLines.push(cur);
+  }
+  // split each line into cells by horizontal gaps
+  const lineCells=allLines.map(line=>{
+    line.sort((a,b)=>a.x-b.x);
+    const gaps=line.slice(1).map((it,i)=>it.x-(line[i].x+line[i].w)).filter(g=>g>0).sort((a,b)=>a-b);
+    const med=gaps.length? gaps[Math.floor(gaps.length/2)]:6;
+    const thr=Math.max(10,med*2.2);
+    const cells=[]; let c=null;
+    for(const it of line){
+      if(c && (it.x-(c.x+c.w))<=thr){ c.s+=' '+it.s; c.w=(it.x+it.w)-c.x; }
+      else { c={x:it.x,w:it.w,s:it.s}; cells.push(c); }
+    }
+    return cells;
+  }).filter(cs=>cs.length);
+  if(!lineCells.length) throw new Error('No selectable text found — the PDF may be scanned images');
+  // cluster column x-starts across all lines
+  const starts=[]; lineCells.forEach(cs=>cs.forEach(c=>starts.push(c.x)));
+  starts.sort((a,b)=>a-b);
+  const cols=[]; const colTol=18;
+  starts.forEach(x=>{ const last=cols[cols.length-1]; if(last && x-last.x<=colTol){ last.x=(last.x*last.n+x)/(last.n+1); last.n++; } else cols.push({x,n:1}); });
+  const colX=cols.map(c=>c.x);
+  const assign=cell=>{ let bi=0,bd=Infinity; colX.forEach((cx,i)=>{const d=Math.abs(cell.x-cx); if(d<bd){bd=d;bi=i;}}); return bi; };
+  const grid=lineCells.map(cells=>{
+    const row=new Array(colX.length).fill('');
+    cells.forEach(c=>{ const i=assign(c); row[i]=row[i]? row[i]+' '+c.s : c.s; });
+    return row;
+  });
+  const p=gridToParsed(grid,'PDF');
+  if(!p) throw new Error('Could not detect a member table in that PDF');
+  p.note='Extracted from the PDF layout — please check the columns line up correctly.';
+  return p;
+}
+
+/* --- common: grid (array of arrays) -> {headers, rows} --- */
+function gridToParsed(grid, source){
+  if(!grid || !grid.length) return null;
+  const hi=grid.findIndex(r=>r.some(c=>String(c).trim()!==''));
+  if(hi<0) return null;
+  const headers=grid[hi].map(h=>String(h).trim()).map((h,i)=>h||('Column '+(i+1)));
+  const rows=[];
+  for(let i=hi+1;i<grid.length;i++){
+    const r=grid[i]; if(!r || r.every(c=>String(c).trim()==='')) continue;
+    rows.push(headers.map((h,j)=> r[j]!==undefined? String(r[j]).trim():''));
+  }
+  if(!rows.length) return null;
+  return {headers, rows, source};
+}
+
+/* ---------- import review / confirm ---------- */
+let pending=null;
+function stageImport(headers, rows, source, note){
+  pending={headers, rows};
+  $('#ip_src').textContent=source||'File';
+  $('#ip_count').textContent=rows.length;
+  const noteEl=$('#ip_note'); noteEl.textContent=note||''; noteEl.style.display=note?'':'none';
+  const chips=$('#ip_cols'); chips.innerHTML='';
+  headers.forEach(h=>{ const c=el('span','chip'); c.textContent=h; chips.appendChild(c); });
+  const tbl=$('#ip_table'); tbl.innerHTML='';
+  const head=el('div','pt-row pt-head');
+  headers.forEach(h=>{ const d=el('div','pt-cell'); d.textContent=h; head.appendChild(d); });
+  tbl.appendChild(head);
+  rows.slice(0,5).forEach(r=>{ const tr=el('div','pt-row'); r.forEach(v=>{const d=el('div','pt-cell'); d.textContent=v; tr.appendChild(d);}); tbl.appendChild(tr); });
+  $('#ip_more').textContent = rows.length>5 ? ('+ '+(rows.length-5)+' more rows') : '';
+  $('#ip_btn').textContent='Add '+rows.length+' member'+(rows.length>1?'s':'');
+  openImport();
+}
+function commitImport(){
+  if(!pending) return;
+  const {headers, rows}=pending;
+  const merged=[...fields]; headers.forEach(h=>{ if(!merged.includes(h)) merged.push(h); });
+  fields=merged;
+  rows.forEach(r=>{ const o={__id:uid()}; headers.forEach((h,j)=>o[h]=r[j]||''); members.push(o); });
+  save(); refreshData(); closeImport();
+  toast(rows.length+' member'+(rows.length>1?'s':'')+' imported'); pending=null;
+}
+function openImport(){ $('#importBg').classList.add('on'); $('#importSheet').classList.add('on'); document.body.style.overflow='hidden'; }
+function closeImport(){ $('#importBg').classList.remove('on'); $('#importSheet').classList.remove('on'); document.body.style.overflow=''; pending=null; }
+$('#ip_btn').onclick=commitImport;
+$('#ip_cancel').onclick=closeImport;
+$('#ip_cancel2').onclick=closeImport;
+$('#importBg').onclick=closeImport;
+document.addEventListener('keydown',e=>{ if(e.key==='Escape' && $('#importSheet').classList.contains('on')) closeImport(); });
+
+/* ---------- export ---------- */
+$('#exportBtn').onclick = ()=>{
+  if(!members.length){ toast('Nothing to export', true); return; }
+  const data = members.map(m=>{ const o={}; fields.forEach(f=>o[f]=m[f]??''); return o; });
+  const ws = XLSX.utils.json_to_sheet(data, {header:fields});
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Members');
+  const safe = (society.name||'members').replace(/[^\w]+/g,'_').slice(0,40);
+  XLSX.writeFile(wb, safe+'_registry.xlsx');
+  toast('Exported '+members.length+' members');
+};
+
+/* ---------- clear ---------- */
+$('#clearBtn').onclick = ()=>{
+  if(!confirm('Remove all imported member records? Society details are kept.')) return;
+  members=[]; fields=[]; save(); refreshData(); toast('Member data cleared');
+};
+
+/* ---------- search ---------- */
+const qEl = $('#q');
+qEl.oninput = ()=>{ $('#clearQ').classList.toggle('hide', !qEl.value); runSearch(); };
+$('#clearQ').onclick = ()=>{ qEl.value=''; $('#clearQ').classList.add('hide'); runSearch(); qEl.focus(); };
+
+function initials(str){ const p=String(str||'?').trim().split(/\s+/); return ((p[0]?.[0]||'')+(p[1]?.[0]||'')).toUpperCase()||'?'; }
+function displayName(m){ return (nameKey && m[nameKey]) ? m[nameKey] : (m[fields[0]]||'Unnamed'); }
+function displaySub(m){ return subKey && m[subKey] ? m[subKey] : ''; }
+
+function runSearch(){
+  const box=$('#results');
+  const q = qEl.value.trim().toLowerCase();
+  if(!members.length){
+    box.innerHTML = '<div class="empty"><div class="ic">⌕</div>Import a membership file to begin searching the registry.</div>';
+    return;
+  }
+  let list = members;
+  if(q){
+    list = members.filter(m => fields.some(f => String(m[f]||'').toLowerCase().includes(q)));
+  }
+  // sort by display name
+  list = [...list].sort((a,b)=> displayName(a).localeCompare(displayName(b)));
+  if(!list.length){
+    box.innerHTML = '<div class="empty"><div class="ic">∅</div>No members match “'+escapeHtml(qEl.value)+'”.</div>';
+    return;
+  }
+  const shown = q ? list : list.slice(0,50);
+  box.innerHTML='';
+  shown.forEach(m=>{
+    const row = el('div','mrow fade');
+    const av = el('div','av'); av.textContent = initials(displayName(m));
+    const info = el('div'); info.style.minWidth='0';
+    const nm = el('div','nm'); nm.textContent = displayName(m);
+    info.appendChild(nm);
+    const sub = displaySub(m);
+    if(sub){ const s=el('div','sub'); s.textContent=sub; info.appendChild(s); }
+    const chev = el('div','chev'); chev.textContent='›';
+    row.append(av, info, chev);
+    row.onclick = ()=> openDetail(m.__id);
+    box.appendChild(row);
+  });
+  if(!q && list.length>50){
+    const more = el('div','empty'); more.style.padding='14px';
+    more.textContent = 'Showing first 50 of '+list.length+' · refine with search above';
+    box.appendChild(more);
+  }
+}
+
+/* ---------- detail sheet ---------- */
+let activeId=null, editing=false;
+function openDetail(id){
+  const m = members.find(x=>x.__id===id); if(!m) return;
+  activeId=id; editing=false;
+  renderDetail(m);
+  openSheet();
+}
+function renderDetail(m){
+  $('#d_av').textContent = initials(displayName(m));
+  $('#d_name').textContent = displayName(m);
+  $('#d_sub').textContent = displaySub(m) || (subKey||'');
+  const body=$('#sheetBody'); body.innerHTML='';
+  fields.forEach(f=>{
+    if(f===nameKey) return; // shown in header
+    const kv=el('div','kv');
+    const k=el('div','k'); k.textContent=f;
+    const v=el('div','v'); const val=m[f];
+    if(val && String(val).trim()!==''){ v.textContent=val; renderLinks(v,f,val); }
+    else { v.textContent='—'; v.classList.add('blank'); }
+    kv.append(k,v); body.appendChild(kv);
+  });
+  const foot=$('#sheetFoot');
+  foot.innerHTML='';
+  const editB=el('button','btn ghost grow'); editB.textContent='Edit';
+  editB.onclick=()=>renderEdit(m);
+  const delB=el('button','btn danger'); delB.textContent='Delete';
+  delB.onclick=()=>deleteMember(m.__id);
+  foot.append(editB, delB);
+}
+function renderLinks(v,f,val){
+  const l=f.toLowerCase();
+  if((l.includes('phone')||l.includes('mobile')||l.includes('contact')) && /\d{6,}/.test(val)){
+    v.innerHTML=''; const a=el('a'); a.href='tel:'+String(val).replace(/[^\d+]/g,''); a.textContent=val; a.style.color='var(--gold-bright)'; a.style.textDecoration='none'; v.appendChild(a);
+  } else if(l.includes('email') && val.includes('@')){
+    v.innerHTML=''; const a=el('a'); a.href='mailto:'+val; a.textContent=val; a.style.color='var(--gold-bright)'; a.style.textDecoration='none'; v.appendChild(a);
+  }
+}
+function renderEdit(m){
+  editing=true;
+  const body=$('#sheetBody'); body.innerHTML='';
+  const grid=el('div','editgrid');
+  fields.forEach(f=>{
+    const lab=el('label','f');
+    const sp=el('span'); sp.textContent=f; lab.appendChild(sp);
+    const long = String(m[f]||'').length>44 || f.toLowerCase().includes('address');
+    const inp = el(long?'textarea':'input');
+    inp.value = m[f]||''; inp.dataset.field=f;
+    lab.appendChild(inp); grid.appendChild(lab);
+  });
+  body.appendChild(grid);
+  const foot=$('#sheetFoot'); foot.innerHTML='';
+  const cancel=el('button','btn ghost'); cancel.textContent='Cancel'; cancel.onclick=()=>renderDetail(m);
+  const saveB=el('button','btn primary grow'); saveB.textContent='Save changes';
+  saveB.onclick=()=>{
+    body.querySelectorAll('[data-field]').forEach(inp=>{ m[inp.dataset.field]=inp.value.trim(); });
+    save(); refreshData(); renderDetail(m); toast('Member updated');
+  };
+  foot.append(cancel, saveB);
+}
+function deleteMember(id){
+  const m=members.find(x=>x.__id===id); if(!m) return;
+  if(!confirm('Delete “'+displayName(m)+'” from the registry? This cannot be undone.')) return;
+  members = members.filter(x=>x.__id!==id);
+  save(); refreshData(); closeSheet(); toast('Member deleted');
+}
+
+/* ---------- add member ---------- */
+$('#addBtn').onclick = ()=>{
+  if(!fields.length){ toast('Import a file first to define the fields', true); return; }
+  const blank={__id:uid()}; fields.forEach(f=>blank[f]='');
+  activeId=blank.__id;
+  $('#d_av').textContent='＋'; $('#d_name').textContent='New member'; $('#d_sub').textContent='';
+  const body=$('#sheetBody'); body.innerHTML='';
+  const grid=el('div','editgrid');
+  fields.forEach(f=>{
+    const lab=el('label','f'); const sp=el('span'); sp.textContent=f; lab.appendChild(sp);
+    const long=f.toLowerCase().includes('address');
+    const inp=el(long?'textarea':'input'); inp.dataset.field=f; lab.appendChild(inp); grid.appendChild(lab);
+  });
+  body.appendChild(grid);
+  const foot=$('#sheetFoot'); foot.innerHTML='';
+  const cancel=el('button','btn ghost'); cancel.textContent='Cancel'; cancel.onclick=closeSheet;
+  const saveB=el('button','btn primary grow'); saveB.textContent='Add to registry';
+  saveB.onclick=()=>{
+    body.querySelectorAll('[data-field]').forEach(inp=>{ blank[inp.dataset.field]=inp.value.trim(); });
+    if(!displayName(blank)||displayName(blank)==='Unnamed'){ toast('Enter at least a name', true); return; }
+    members.push(blank); save(); refreshData(); openDetail(blank.__id); toast('Member added');
+  };
+  foot.append(cancel, saveB);
+  openSheet();
+};
+
+/* ---------- sheet open/close ---------- */
+function openSheet(){ $('#sheetBg').classList.add('on'); $('#sheet').classList.add('on'); document.body.style.overflow='hidden'; }
+function closeSheet(){ $('#sheetBg').classList.remove('on'); $('#sheet').classList.remove('on'); document.body.style.overflow=''; activeId=null; }
+$('#closeSheet').onclick=closeSheet; $('#sheetBg').onclick=closeSheet;
+document.addEventListener('keydown',e=>{ if(e.key==='Escape' && $('#sheet').classList.contains('on')) closeSheet(); });
+
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ---------- PWA: manifest + service worker via blob ---------- */
+(function pwa(){
+  try{
+    const icon = $('#mark').toDataURL('image/png');
+    const manifest = {
+      name:'Sadasya — Membership Registry', short_name:'Sadasya',
+      description:'Offline-first membership registry for societies & sanghams',
+      start_url:'.', display:'standalone', background_color:'#0a0908', theme_color:'#0a0908',
+      icons:[{src:icon,sizes:'92x92',type:'image/png',purpose:'any maskable'},
+             {src:icon,sizes:'192x192',type:'image/png',purpose:'any'},
+             {src:icon,sizes:'512x512',type:'image/png',purpose:'any'}]
+    };
+    const mBlob = new Blob([JSON.stringify(manifest)],{type:'application/json'});
+    const link=document.createElement('link'); link.rel='manifest'; link.href=URL.createObjectURL(mBlob);
+    document.head.appendChild(link);
+    const apple=document.createElement('link'); apple.rel='apple-touch-icon'; apple.href=icon; document.head.appendChild(apple);
+
+    if('serviceWorker' in navigator){
+      const sw = `
+        const C='sadasya-v1';
+        self.addEventListener('install',e=>{self.skipWaiting();});
+        self.addEventListener('activate',e=>{e.waitUntil(self.clients.claim());});
+        self.addEventListener('fetch',e=>{
+          e.respondWith(
+            caches.open(C).then(c=>c.match(e.request).then(r=> r ||
+              fetch(e.request).then(res=>{ try{c.put(e.request,res.clone());}catch(_){} return res; })
+              .catch(()=>r)
+            ))
+          );
+        });`;
+      const swURL = URL.createObjectURL(new Blob([sw],{type:'text/javascript'}));
+      navigator.serviceWorker.register(swURL).catch(()=>{});
+    }
+  }catch(e){ /* sandbox may block; app still works */ }
+})();
+
+/* install prompt */
+let deferredPrompt=null;
+window.addEventListener('beforeinstallprompt',e=>{
+  e.preventDefault(); deferredPrompt=e;
+  if(sessionStorage.getItem('sadasya.dismissInstall')) return;
+  $('#installBar').classList.remove('hide');
+});
+$('#installBtn').onclick=async()=>{
+  if(!deferredPrompt) return;
+  deferredPrompt.prompt(); await deferredPrompt.userChoice;
+  deferredPrompt=null; $('#installBar').classList.add('hide');
+};
+$('#dismissInstall').onclick=()=>{ $('#installBar').classList.add('hide'); sessionStorage.setItem('sadasya.dismissInstall','1'); };
+window.addEventListener('appinstalled',()=>$('#installBar').classList.add('hide'));
+
+/* ---------- go ---------- */
+route();
+</script>
+</body>
+</html>
