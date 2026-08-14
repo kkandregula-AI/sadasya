@@ -853,25 +853,16 @@ function findDuplicates(){
   const avail=()=> members.filter(m=>!handled.has(m.__id));
   const groupBy=(list, keyFn)=>{
     const map=new Map();
-    list.forEach(m=>{ let ks=keyFn(m); if(!Array.isArray(ks)) ks=[ks];
-      ks.forEach(k=>{ if(k==null||k==='') return; if(!map.has(k)) map.set(k,[]); map.get(k).push(m); }); });
+    list.forEach(m=>{ const k=keyFn(m); if(k==null||k==='') return; if(!map.has(k)) map.set(k,[]); map.get(k).push(m); });
     return [...map.values()].map(dedupById).filter(g=>g.length>1);
   };
-  // 1. exact — identical across every field
+  // 1. exact — identical across every field (safe to auto-remove)
   const exactGroups=groupBy(members, sigOf);
   exactGroups.forEach(g=>g.forEach(m=>handled.add(m.__id)));
-  // 2. same full name (surname+name) AND a shared phone
-  const namePhoneGroups=groupBy(avail(), m=>{ const nn=normName(displayName(m)); if(!nn) return []; return phonesOf(m).map(p=>nn+'\u0001'+p); });
-  namePhoneGroups.forEach(g=>g.forEach(m=>handled.add(m.__id)));
-  // 3. same full name only
+  // 2. same full name (surname + name) — the only duplicate signal
   const nameGroups=groupBy(avail(), m=>normName(displayName(m)));
   nameGroups.forEach(g=>g.forEach(m=>handled.add(m.__id)));
-  // 4. shared phone only (different names — often family)
-  const pmap=new Map();
-  avail().forEach(m=> phonesOf(m).forEach(p=>{ if(!pmap.has(p)) pmap.set(p,[]); pmap.get(p).push(m); }));
-  const phoneGroups=[...pmap.entries()].map(([p,g])=>({phone:p, members:dedupById(g)})).filter(x=>x.members.length>1);
-  phoneGroups.forEach(x=>x.members.forEach(m=>handled.add(m.__id)));
-  return {exactGroups, namePhoneGroups, nameGroups, phoneGroups};
+  return {exactGroups, nameGroups};
 }
 function openDuplicates(){
   if(!members.length){ toast('No members to scan yet', true); return; }
@@ -900,13 +891,13 @@ function dupGroup(list, markFirstKeep){
   return g;
 }
 function renderDuplicates(){
-  const {exactGroups, namePhoneGroups, nameGroups, phoneGroups}=findDuplicates();
+  const {exactGroups, nameGroups}=findDuplicates();
   const body=$('#dup_body'); body.innerHTML='';
-  const total=exactGroups.length+namePhoneGroups.length+nameGroups.length+phoneGroups.length;
+  const total=exactGroups.length+nameGroups.length;
   const sum=$('#dup_sum');
   if(!total){
     sum.textContent='No duplicates found';
-    body.innerHTML='<div class="empty"><div class="ic">✓</div>Your registry looks clean — no repeated records, matching full names, or shared numbers.</div>';
+    body.innerHTML='<div class="empty"><div class="ic">✓</div>Your registry looks clean — no repeated records or matching full names.</div>';
     $('#dup_auto').classList.add('hide');
     return;
   }
@@ -921,20 +912,9 @@ function renderDuplicates(){
     body.appendChild(dupSection('Exact duplicates · '+exactGroups.length, 'Identical records, most likely from merging tabs. Safe to keep one of each.'));
     exactGroups.forEach(g=> body.appendChild(dupGroup(g, true)));
   }
-  if(namePhoneGroups.length){
-    body.appendChild(dupSection('Same name & phone · '+namePhoneGroups.length, 'Same surname + name and a shared phone number — very likely the same person.'));
-    namePhoneGroups.forEach(g=> body.appendChild(dupGroup(g, true)));
-  }
   if(nameGroups.length){
-    body.appendChild(dupSection('Same name · '+nameGroups.length, 'Same surname + name but different phone/details — check before deleting.'));
+    body.appendChild(dupSection('Same name · '+nameGroups.length, 'Same surname + name — matched on full name only. Review each before deleting.'));
     nameGroups.forEach(g=> body.appendChild(dupGroup(g, false)));
-  }
-  if(phoneGroups.length){
-    body.appendChild(dupSection('Shared phone · '+phoneGroups.length, 'Different names sharing a phone number — often family members, review carefully.'));
-    phoneGroups.forEach(x=>{
-      const lbl=el('div','dup-sec'); const p=el('p'); p.textContent='Number '+x.phone; lbl.appendChild(p); body.appendChild(lbl);
-      body.appendChild(dupGroup(x.members, false));
-    });
   }
 }
 $('#dup_auto').onclick=()=>{
@@ -1021,15 +1001,23 @@ function renderDetail(m){
   $('#d_name').textContent = displayName(m);
   $('#d_sub').textContent = displaySub(m);
   const body=$('#sheetBody'); body.innerHTML='';
+  let hidden=0;
   fields.forEach(f=>{
     if(f===nameKey || f===surnameKey) return; // shown in header
+    const val=m[f];
+    if(!val || String(val).trim()===''){ hidden++; return; } // hide empty fields
     const kv=el('div','kv');
     const k=el('div','k'); k.textContent=f;
-    const v=el('div','v'); const val=m[f];
-    if(val && String(val).trim()!==''){ v.textContent=val; renderLinks(v,f,val); }
-    else { v.textContent='—'; v.classList.add('blank'); }
+    const v=el('div','v'); v.textContent=val; renderLinks(v,f,val);
     kv.append(k,v); body.appendChild(kv);
   });
+  if(!body.children.length){
+    const e=el('div','empty'); e.style.padding='24px 10px'; e.textContent='No other details recorded — tap Edit to add.'; body.appendChild(e);
+  } else if(hidden){
+    const n=el('div'); n.style.cssText='text-align:center;color:var(--faint);font-size:.72rem;font-family:"DM Mono",monospace;letter-spacing:.04em;padding:16px 0 4px';
+    n.textContent=hidden+' empty field'+(hidden>1?'s':'')+' hidden · tap Edit to fill any';
+    body.appendChild(n);
+  }
   const foot=$('#sheetFoot');
   foot.innerHTML='';
   const editB=el('button','btn ghost grow'); editB.textContent='Edit';
