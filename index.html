@@ -12,9 +12,6 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script>if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}</script>
 <style>
   :root{
     --bg:#0a0908; --bg-2:#12100d; --bg-3:#1a1611; --bg-4:#221d16;
@@ -219,6 +216,18 @@
   /* setup divider */
   .setup-or{display:flex;align-items:center;gap:12px;margin:16px 0 12px;color:var(--faint);font-family:'DM Mono',monospace;font-size:.66rem;letter-spacing:.2em;text-transform:uppercase}
   .setup-or::before,.setup-or::after{content:"";height:1px;flex:1;background:var(--border)}
+  /* duplicates */
+  .dup-sec{margin:14px 0 8px}
+  .dup-sec h4{font-family:'Cinzel',serif;font-size:1rem;color:var(--gold-bright);font-weight:600}
+  .dup-sec p{color:var(--muted);font-size:.8rem;margin-top:2px;line-height:1.4}
+  .dup-grp{border:1px solid var(--border);border-radius:12px;padding:4px 13px;margin-bottom:10px;background:var(--bg-3)}
+  .dup-mem{display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid var(--border)}
+  .dup-mem:last-child{border-bottom:none}
+  .dup-mem .info{flex:1;min-width:0}
+  .dup-mem .info .nm{font-size:.92rem;font-weight:600;line-height:1.25}
+  .dup-mem .info .sub{font-family:'DM Mono',monospace;font-size:.7rem;color:var(--muted);margin-top:3px;letter-spacing:.02em}
+  .dup-mem .del{background:var(--danger-bg);border:1px solid rgba(207,113,102,.4);color:var(--danger);border-radius:8px;padding:7px 13px;font-size:.8rem;cursor:pointer;flex:0 0 auto;font-weight:600}
+  .dup-mem .keep{font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ok);flex:0 0 auto}
 
   /* ---------- Toast ---------- */
   .toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,80px);z-index:80;background:var(--bg-4);border:1px solid var(--border-str);color:var(--text);padding:12px 18px;border-radius:12px;font-size:.9rem;box-shadow:var(--shadow);opacity:0;transition:transform .25s, opacity .25s;display:flex;align-items:center;gap:9px;max-width:90vw}
@@ -309,13 +318,14 @@
       <div class="drop" id="drop">
         <div class="ic">⤓</div>
         <h3 id="dropTitle">Load membership file</h3>
-        <p id="dropSub">Tap to choose an Excel, Word, or PDF file</p>
-        <div class="hint">.xlsx · .csv · .docx · .pdf · .json — tables read automatically, first row = headers</div>
+        <p id="dropSub">Tap to choose an Excel or JSON file</p>
+        <div class="hint">.xlsx · .csv · .json — every sheet/tab is read, first row = headers</div>
       </div>
-      <input type="file" id="file" accept=".xlsx,.xls,.csv,.docx,.pdf,.json,application/json" class="hide"/>
+      <input type="file" id="file" accept=".xlsx,.xls,.csv,.json,application/json" class="hide"/>
       <div class="row" id="dataActions" style="margin-top:14px">
         <button class="btn sm ghost" id="addBtn">＋ Add member</button>
         <button class="btn sm ghost" id="fieldsBtn">⚙ Fields</button>
+        <button class="btn sm ghost" id="dupBtn">⧉ Duplicates</button>
         <button class="btn sm ghost" id="exportBtn">⤒ Export Excel</button>
         <button class="btn sm ghost" id="backupBtn">⤓ Backup (JSON)</button>
         <button class="btn sm ghost danger" id="clearBtn">Clear data</button>
@@ -402,6 +412,26 @@
   <div class="sfoot">
     <button class="btn ghost" id="fm_cancel">Cancel</button>
     <button class="btn primary grow" id="fm_save">Save fields</button>
+  </div>
+</div>
+
+<!-- ============ DUPLICATES SHEET ============ -->
+<div class="sheet-bg" id="dupBg"></div>
+<div class="sheet" id="dupSheet">
+  <div class="grab"></div>
+  <div class="shead">
+    <div style="flex:1;min-width:0">
+      <div class="nm">Find duplicates</div>
+      <div class="sub" id="dup_sum">Scanning…</div>
+    </div>
+    <button class="closex" id="dup_close">×</button>
+  </div>
+  <div class="sbody">
+    <button class="btn primary hide" id="dup_auto" style="width:100%;margin-bottom:16px">Auto-remove exact duplicates</button>
+    <div id="dup_body"></div>
+  </div>
+  <div class="sfoot">
+    <button class="btn ghost grow" id="dup_done">Done</button>
   </div>
 </div>
 
@@ -566,7 +596,7 @@ function refreshData(){
   $('#st_upd').textContent = updated ? new Date(updated).toLocaleDateString(undefined,{day:'numeric',month:'short'}) : '—';
   const has = members.length>0;
   $('#dropTitle').textContent = has ? 'Add more members' : 'Load membership file';
-  $('#dropSub').textContent = has ? 'Import another file — new members are added to the registry' : 'Tap to choose an Excel, Word, PDF, or JSON file';
+  $('#dropSub').textContent = has ? 'Import another file — new members are added to the registry' : 'Tap to choose an Excel or JSON file';
   $('#dataActions').classList.toggle('hide', !(has || fields.length>0));
   runSearch();
 }
@@ -582,122 +612,41 @@ async function importFile(file){
   const name=(file.name||'').toLowerCase();
   const ext=name.slice(name.lastIndexOf('.')+1);
   try{
-    let parsed;
     if(ext==='json'){ await importJson(file); return; }
-    else if(ext==='pdf'){ toast('Reading PDF…'); parsed=await parsePdf(file); }
-    else if(ext==='docx'){ toast('Reading Word doc…'); parsed=await parseDocx(file); }
-    else if(ext==='doc'){ toast('Old .doc isn\u2019t supported — save it as .docx', true); return; }
-    else { parsed=await parseExcel(file); }
+    if(!['xlsx','xls','csv'].includes(ext)){ toast('Only Excel (.xlsx / .csv) and JSON files can be imported', true); return; }
+    const parsed=await parseExcel(file);
     if(!parsed || !parsed.rows.length){ toast('No member records found in that file', true); return; }
     stageImport(parsed.headers, parsed.rows, parsed.source, parsed.note, parsed.lowQuality);
   }catch(err){ console.error(err); toast(err.message || 'Could not read that file', true); }
 }
 
-/* --- Excel / CSV --- */
+/* --- Excel / CSV: reads EVERY sheet, reports what was skipped --- */
 function parseExcel(file){
   return new Promise((res,rej)=>{
     const rd=new FileReader();
     rd.onload=ev=>{ try{
       const wb=XLSX.read(ev.target.result,{type:'array'});
-      const ws=wb.Sheets[wb.SheetNames[0]];
-      const grid=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,defval:''});
-      const p=gridToParsed(grid,'Excel'); if(!p) return rej(new Error('That sheet looks empty'));
-      res(p);
+      const parts=[], info=[];
+      wb.SheetNames.forEach(nm=>{
+        const grid=XLSX.utils.sheet_to_json(wb.Sheets[nm], {header:1, raw:false, defval:''});
+        const p=gridToParsed(grid, 'Excel');
+        if(p){ parts.push(p); info.push({name:nm, count:p.rows.length, above:p.aboveHeader||0, blank:p.skippedBlank||0}); }
+      });
+      if(!parts.length) return rej(new Error('That workbook has no member rows'));
+      const merged = parts.length===1 ? {headers:parts[0].headers, rows:parts[0].rows} : mergeParsed(parts);
+      const totalAbove=info.reduce((a,s)=>a+s.above,0);
+      const totalBlank=info.reduce((a,s)=>a+s.blank,0);
+      const bits=[];
+      if(info.length>1) bits.push('combined '+info.length+' sheets ('+info.map(s=>s.name+': '+s.count).join(', ')+')');
+      if(totalBlank>0) bits.push(totalBlank+' blank row'+(totalBlank>1?'s':'')+' skipped');
+      if(totalAbove>0) bits.push(totalAbove+' title/heading row'+(totalAbove>1?'s':'')+' above the header skipped');
+      merged.source='Excel';
+      merged.note = bits.length ? (merged.rows.length+' members — '+bits.join('; ')+'.') : (merged.rows.length+' members read.');
+      res(merged);
     }catch(e){ rej(new Error('Could not read that spreadsheet')); } };
     rd.onerror=()=>rej(new Error('Could not read the file'));
     rd.readAsArrayBuffer(file);
   });
-}
-
-/* --- Word (.docx): first/largest table, else labelled paragraphs --- */
-async function parseDocx(file){
-  if(typeof mammoth==='undefined') throw new Error('Word reader still loading — try again in a moment');
-  const buf=await file.arrayBuffer();
-  const {value:html}=await mammoth.convertToHtml({arrayBuffer:buf});
-  const doc=new DOMParser().parseFromString(html,'text/html');
-  const tables=[...doc.querySelectorAll('table')];
-  if(tables.length){
-    tables.sort((a,b)=>b.rows.length-a.rows.length);
-    const grid=[...tables[0].rows].map(tr=>[...tr.cells].map(td=>td.textContent.trim()));
-    const p=gridToParsed(grid,'Word');
-    if(p) return p;
-  }
-  // fallback: "Field: Value" lines, blank line separates members
-  const paras=[...doc.querySelectorAll('p,li')].map(p=>p.textContent.trim());
-  const recs=[]; let cur={};
-  const push=()=>{ if(Object.keys(cur).length){ recs.push(cur); cur={}; } };
-  for(const line of paras){
-    if(!line){ push(); continue; }
-    const m=line.match(/^([^:\uFF1A]{1,40})[:\uFF1A]\s*(.+)$/);
-    if(m) cur[m[1].trim()]=m[2].trim();
-  }
-  push();
-  if(!recs.length) throw new Error('No table or labelled details found in that document');
-  const headers=[]; recs.forEach(r=>Object.keys(r).forEach(k=>{ if(!headers.includes(k)) headers.push(k); }));
-  const rows=recs.map(r=>headers.map(h=>r[h]||''));
-  return {headers, rows, source:'Word', note:'Parsed from labelled paragraphs — please verify the columns.'};
-}
-
-/* --- PDF: reconstruct rows using the header row's columns as anchors --- */
-async function parsePdf(file){
-  if(typeof pdfjsLib==='undefined') throw new Error('PDF reader still loading — try again in a moment');
-  const buf=await file.arrayBuffer();
-  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
-  const lines=[];
-  for(let pg=1;pg<=pdf.numPages;pg++){
-    const page=await pdf.getPage(pg);
-    const tc=await page.getTextContent();
-    const items=tc.items.filter(it=>it.str.trim()!=='').map(it=>({x:it.transform[4],y:it.transform[5],w:it.width||0,s:it.str.trim()}));
-    if(!items.length) continue;
-    items.sort((a,b)=> b.y-a.y || a.x-b.x);
-    let cur=null,lastY=null; const yTol=3;
-    for(const it of items){
-      if(lastY===null || Math.abs(it.y-lastY)<=yTol){ if(!cur) cur={items:[]}; cur.items.push(it); }
-      else { if(cur) lines.push(cur); cur={items:[it]}; }
-      lastY=it.y;
-    }
-    if(cur) lines.push(cur);
-  }
-  if(!lines.length) throw new Error('No selectable text found — the PDF may be scanned images');
-
-  // split a line into gap-separated cells (used to locate the header row)
-  const splitCells=(items)=>{
-    const s=[...items].sort((a,b)=>a.x-b.x);
-    const gaps=s.slice(1).map((it,i)=>it.x-(s[i].x+s[i].w)).filter(g=>g>0).sort((a,b)=>a-b);
-    const med=gaps.length? gaps[Math.floor(gaps.length/2)]:6;
-    const thr=Math.max(12, med*2.5);
-    const cells=[]; let c=null;
-    for(const it of s){ if(c && (it.x-(c.x+c.w))<=thr){ c.s+=' '+it.s; c.w=(it.x+it.w)-c.x; } else { c={x:it.x,w:it.w,s:it.s}; cells.push(c); } }
-    return cells;
-  };
-  // header row = the line (in the first 12) with the most gap-separated cells
-  const scan=Math.min(lines.length,12);
-  let hIdx=0, hCells=splitCells(lines[0].items), bestN=hCells.length;
-  for(let i=1;i<scan;i++){ const cs=splitCells(lines[i].items); if(cs.length>bestN){ bestN=cs.length; hIdx=i; hCells=cs; } }
-
-  const anchors=hCells.map(c=> c.x + (c.w||0)/2);
-  const assign=x=>{ let bi=0,bd=Infinity; anchors.forEach((ax,i)=>{const d=Math.abs(x-ax); if(d<bd){bd=d;bi=i;}}); return bi; };
-  const buildRow=(items)=>{
-    const row=new Array(anchors.length).fill('');
-    [...items].sort((a,b)=>a.x-b.x).forEach(it=>{ const i=assign(it.x + it.w/2); row[i]=row[i]? row[i]+' '+it.s : it.s; });
-    return row;
-  };
-
-  const width=anchors.length;
-  const headers=[]; for(let j=0;j<width;j++){ const h=(hCells[j].s||'').trim(); headers.push(h || ('Column '+(j+1))); }
-  const rows=[];
-  for(let i=hIdx+1;i<lines.length;i++){ const r=buildRow(lines[i].items); if(r.some(c=>String(c).trim()!=='')) rows.push(r); }
-  if(!rows.length) throw new Error('No member rows found in that PDF');
-
-  // quality: how many columns actually received data?
-  const fill=new Array(width).fill(0);
-  rows.forEach(r=>r.forEach((v,i)=>{ if(String(v).trim()!=='') fill[i]++; }));
-  const usedCols=fill.filter(c=>c>0).length;
-  const lowQuality = width>2 && usedCols<=1;
-  const note = lowQuality
-    ? 'This PDF didn\u2019t separate into columns — most data landed in one field, so column names can\u2019t be recovered from it. For a clean import use the Excel version of this list; otherwise import as-is and tidy fields afterwards.'
-    : 'Reconstructed from the PDF layout — check the columns below and rename any before importing.';
-  return {headers, rows, source:'PDF', note, lowQuality};
 }
 
 /* --- common: grid (array of arrays) -> {headers, rows} ---
@@ -714,13 +663,25 @@ function gridToParsed(grid, source){
   const width=grid.reduce((w,r)=>Math.max(w, r?r.length:0), 0);
   const headers=[];
   for(let j=0;j<width;j++){ const h=String((grid[hi][j]??'')).trim(); headers.push(h || ('Column '+(j+1))); }
-  const rows=[];
+  const rows=[]; let skippedBlank=0;
   for(let i=hi+1;i<grid.length;i++){
-    const r=grid[i]; if(!r || r.every(c=>String(c).trim()==='')) continue;
+    const r=grid[i];
+    if(!r || r.every(c=>String(c).trim()==='')){ skippedBlank++; continue; }
     rows.push(headers.map((h,j)=> r[j]!==undefined? String(r[j]).trim():''));
   }
   if(!rows.length) return null;
-  return {headers, rows, source};
+  return {headers, rows, source, headerIndex:hi, aboveHeader:hi, skippedBlank};
+}
+/* merge several parsed sheets by aligning columns on header name */
+function mergeParsed(parts){
+  const headers=[];
+  parts.forEach(p=>p.headers.forEach(h=>{ if(!headers.includes(h)) headers.push(h); }));
+  const rows=[];
+  parts.forEach(p=>{
+    const idx=p.headers.map(h=>headers.indexOf(h));
+    p.rows.forEach(r=>{ const out=new Array(headers.length).fill(''); r.forEach((v,j)=>{ if(idx[j]>=0) out[idx[j]]=v; }); rows.push(out); });
+  });
+  return {headers, rows};
 }
 function uniqueNames(arr){
   const used=new Set(), out=[];
@@ -872,6 +833,104 @@ $('#fm_save').onclick=()=>{
 $('#fm_close').onclick=closeFM; $('#fm_cancel').onclick=closeFM; $('#fmBg').onclick=closeFM;
 $('#fieldsBtn').onclick=openFieldManager;
 document.addEventListener('keydown',e=>{ if(e.key==='Escape' && $('#fmSheet').classList.contains('on')) closeFM(); });
+
+/* ---------- duplicate finder ---------- */
+const dedupById = arr => { const seen=new Set(), out=[]; arr.forEach(m=>{ if(!seen.has(m.__id)){ seen.add(m.__id); out.push(m); } }); return out; };
+const normName = s => String(s||'').toLowerCase().replace(/^\s*\d+[.\)\-\s]*/,'').replace(/[^\p{L}\p{N}\s]/gu,'').replace(/\s+/g,' ').trim();
+const sigOf = m => fields.map(f=>String(m[f]??'').trim()).join('\u0001');
+function phonesOf(m){
+  const set=new Set();
+  fields.forEach(f=>{ (String(m[f]||'').match(/\d{10,}/g)||[]).forEach(d=>{ set.add(d.slice(-10)); }); });
+  return [...set];
+}
+function findDuplicates(){
+  const exact={}, byName={}, byPhone={};
+  members.forEach(m=>{
+    (exact[sigOf(m)] = exact[sigOf(m)]||[]).push(m);
+    const nn=normName(displayName(m)); if(nn){ (byName[nn]=byName[nn]||[]).push(m); }
+    phonesOf(m).forEach(p=>{ (byPhone[p]=byPhone[p]||[]).push(m); });
+  });
+  const exactGroups=Object.values(exact).map(dedupById).filter(g=>g.length>1);
+  const exactIds=new Set(); exactGroups.forEach(g=>g.forEach(m=>exactIds.add(m.__id)));
+  const nameGroups=Object.values(byName).map(dedupById).filter(g=>g.length>1)
+    .filter(g=>!g.every(m=>exactIds.has(m.__id)));
+  const phoneGroups=Object.entries(byPhone).map(([k,g])=>[k,dedupById(g)]).filter(([k,g])=>g.length>1)
+    .filter(([k,g])=>!g.every(m=>exactIds.has(m.__id)))
+    .map(([k,g])=>({phone:k, members:g}));
+  return {exactGroups, nameGroups, phoneGroups};
+}
+function openDuplicates(){
+  if(!members.length){ toast('No members to scan yet', true); return; }
+  renderDuplicates();
+  $('#dupBg').classList.add('on'); $('#dupSheet').classList.add('on'); document.body.style.overflow='hidden';
+}
+function closeDup(){ $('#dupBg').classList.remove('on'); $('#dupSheet').classList.remove('on'); document.body.style.overflow=''; }
+function dupMemberRow(m, keep){
+  const r=el('div','dup-mem');
+  const info=el('div','info');
+  const nm=el('div','nm'); nm.textContent=displayName(m); info.appendChild(nm);
+  const s=displaySub(m); if(s){ const sub=el('div','sub'); sub.textContent=s; info.appendChild(sub); }
+  r.appendChild(info);
+  if(keep){ const k=el('span','keep'); k.textContent='keep'; r.appendChild(k); }
+  const del=el('button','del'); del.textContent='Delete';
+  del.onclick=()=>{ members=members.filter(x=>x.__id!==m.__id); save(); refreshData(); renderDuplicates(); toast('Member deleted'); };
+  r.appendChild(del);
+  return r;
+}
+function dupSection(title, desc){
+  const s=el('div','dup-sec'); const h=el('h4'); h.textContent=title; const p=el('p'); p.textContent=desc; s.append(h,p); return s;
+}
+function dupGroup(list, markFirstKeep){
+  const g=el('div','dup-grp');
+  list.forEach((m,i)=> g.appendChild(dupMemberRow(m, markFirstKeep && i===0)));
+  return g;
+}
+function renderDuplicates(){
+  const {exactGroups, nameGroups, phoneGroups}=findDuplicates();
+  const body=$('#dup_body'); body.innerHTML='';
+  const total=exactGroups.length+nameGroups.length+phoneGroups.length;
+  const sum=$('#dup_sum');
+  if(!total){
+    sum.textContent='No duplicates found';
+    body.innerHTML='<div class="empty"><div class="ic">✓</div>Your registry looks clean — no matching names, phones, or repeated records.</div>';
+    $('#dup_auto').classList.add('hide');
+    return;
+  }
+  sum.textContent=total+' group'+(total>1?'s':'')+' to review';
+  const extra=exactGroups.reduce((a,g)=>a+g.length-1,0);
+  if(extra>0){
+    $('#dup_auto').classList.remove('hide');
+    $('#dup_auto').textContent='⚡ Auto-remove '+extra+' exact duplicate'+(extra>1?'s':'')+' (keep one each)';
+  } else $('#dup_auto').classList.add('hide');
+
+  if(exactGroups.length){
+    body.appendChild(dupSection('Exact duplicates · '+exactGroups.length, 'Identical records, most likely from merging tabs. Safe to keep one of each.'));
+    exactGroups.forEach(g=> body.appendChild(dupGroup(g, true)));
+  }
+  if(nameGroups.length){
+    body.appendChild(dupSection('Same name · '+nameGroups.length, 'Same name but different details — check before deleting; could be a genuine second entry.'));
+    nameGroups.forEach(g=> body.appendChild(dupGroup(g, false)));
+  }
+  if(phoneGroups.length){
+    body.appendChild(dupSection('Shared phone · '+phoneGroups.length, 'Share a phone number — may be duplicates, or family members using one number.'));
+    phoneGroups.forEach(x=>{
+      const lbl=el('div','dup-sec'); const p=el('p'); p.textContent='Number '+x.phone; lbl.appendChild(p); body.appendChild(lbl);
+      body.appendChild(dupGroup(x.members, false));
+    });
+  }
+}
+$('#dup_auto').onclick=()=>{
+  const {exactGroups}=findDuplicates();
+  const remove=new Set();
+  exactGroups.forEach(g=> g.slice(1).forEach(m=>remove.add(m.__id)));
+  if(!remove.size) return;
+  if(!confirm('Remove '+remove.size+' exact duplicate record'+(remove.size>1?'s':'')+', keeping one of each?')) return;
+  members=members.filter(m=>!remove.has(m.__id));
+  save(); refreshData(); renderDuplicates(); toast(remove.size+' duplicate'+(remove.size>1?'s':'')+' removed');
+};
+$('#dupBtn').onclick=openDuplicates;
+$('#dup_close').onclick=closeDup; $('#dup_done').onclick=closeDup; $('#dupBg').onclick=closeDup;
+document.addEventListener('keydown',e=>{ if(e.key==='Escape' && $('#dupSheet').classList.contains('on')) closeDup(); });
 
 /* ---------- clear ---------- */
 $('#clearBtn').onclick = ()=>{
