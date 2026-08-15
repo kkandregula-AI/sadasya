@@ -200,6 +200,16 @@
   .pt-cell{padding:8px 11px;font-size:.82rem;color:var(--text);border-right:1px solid var(--border);white-space:nowrap;min-width:90px;max-width:210px;overflow:hidden;text-overflow:ellipsis}
   .pt-cell:last-child{border-right:none}
   .pt-more{text-align:center;color:var(--faint);font-size:.72rem;margin-top:10px;font-family:'DM Mono',monospace}
+  /* import: sheet/tab selector */
+  #ip_sheets{margin-bottom:18px}
+  .sheet-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)}
+  .sheet-row:last-child{border-bottom:none}
+  .sheet-row.off{opacity:.5}
+  .sheet-row input[type=checkbox]{width:20px;height:20px;accent-color:var(--gold);flex:0 0 auto}
+  .sheet-info{flex:1;min-width:0}
+  .sheet-info .sn{font-size:.92rem;font-weight:600;line-height:1.2}
+  .sheet-info .sm{font-family:'DM Mono',monospace;font-size:.68rem;color:var(--muted);margin-top:3px;letter-spacing:.03em}
+  .sheet-hdr{background:var(--bg-3);border:1px solid var(--border-str);color:var(--gold);border-radius:8px;padding:7px 12px;font-size:.7rem;cursor:pointer;flex:0 0 auto;font-family:'DM Mono',monospace;letter-spacing:.04em}
   /* editable column rename list */
   .colrename{display:flex;flex-direction:column;gap:9px;margin-bottom:18px}
   .colrename .cr{display:flex;align-items:center;gap:11px}
@@ -378,6 +388,7 @@
   </div>
   <div class="sbody">
     <div id="ip_note" class="ip-note"></div>
+    <div id="ip_sheets"></div>
     <div class="ip-label">Column names — tap any to rename before importing</div>
     <div class="colrename" id="ip_cols"></div>
     <div class="ip-label">Preview</div>
@@ -619,41 +630,72 @@ async function importFile(file){
   try{
     if(ext==='json'){ await importJson(file); return; }
     if(!['xlsx','xls','csv'].includes(ext)){ toast('Only Excel (.xlsx / .csv) and JSON files can be imported', true); return; }
-    const parsed=await parseExcel(file);
-    if(!parsed || !parsed.rows.length){ toast('No member records found in that file', true); return; }
-    stageImport(parsed.headers, parsed.rows, parsed.source, parsed.note, parsed.lowQuality);
+    const sheets=await parseExcelSheets(file);
+    if(!sheets.length){ toast('No data found in that file', true); return; }
+    stageImportExcel(sheets);
   }catch(err){ console.error(err); toast(err.message || 'Could not read that file', true); }
 }
 
-/* --- Excel / CSV: reads EVERY sheet, reports what was skipped --- */
-function parseExcel(file){
+/* --- Excel / CSV: read every sheet as a raw grid; user picks tabs & header on review --- */
+function guessHasHeader(grid){
+  const scan=Math.min(grid.length,8); let hi=0,best=-1;
+  for(let i=0;i<scan;i++){ const f=(grid[i]||[]).filter(c=>String(c==null?'':c).trim()!=='').length; if(f>best){best=f;hi=i;} }
+  const cells=(grid[hi]||[]).map(c=>String(c==null?'':c).trim()).filter(Boolean);
+  if(!cells.length) return false;
+  // header rows are text labels — a pure number in the fullest row means it's really data
+  return !cells.some(c=>/^\d+(\.\d+)?$/.test(c));
+}
+function parseExcelSheets(file){
   return new Promise((res,rej)=>{
     const rd=new FileReader();
     rd.onload=ev=>{ try{
       const wb=XLSX.read(ev.target.result,{type:'array'});
-      const parts=[], info=[];
+      const sheets=[];
       wb.SheetNames.forEach(nm=>{
         const grid=XLSX.utils.sheet_to_json(wb.Sheets[nm], {header:1, raw:false, defval:''});
-        const p=gridToParsed(grid, 'Excel');
-        if(p){ parts.push(p); info.push({name:nm, count:p.rows.length, above:p.aboveHeader||0, blank:p.skippedBlank||0}); }
+        const nonblank=grid.filter(r=> r && !r.every(c=>String(c==null?'':c).trim()===''));
+        if(!nonblank.length) return;
+        sheets.push({name:nm, grid, hasHeader:guessHasHeader(grid), include:true, rowCount:nonblank.length});
       });
-      if(!parts.length) return rej(new Error('That workbook has no member rows'));
-      const merged = parts.length===1 ? {headers:parts[0].headers, rows:parts[0].rows} : mergeParsed(parts);
-      const totalAbove=info.reduce((a,s)=>a+s.above,0);
-      const totalBlank=info.reduce((a,s)=>a+s.blank,0);
-      const bits=[];
-      if(info.length>1) bits.push('combined '+info.length+' sheets ('+info.map(s=>s.name+': '+s.count).join(', ')+')');
-      if(totalBlank>0) bits.push(totalBlank+' blank row'+(totalBlank>1?'s':'')+' skipped');
-      if(totalAbove>0) bits.push(totalAbove+' title/heading row'+(totalAbove>1?'s':'')+' above the header skipped');
-      merged.source='Excel';
-      merged.note = bits.length ? (merged.rows.length+' members — '+bits.join('; ')+'.') : (merged.rows.length+' members read.');
-      res(merged);
+      if(!sheets.length) return rej(new Error('That workbook has no data'));
+      res(sheets);
     }catch(e){ rej(new Error('Could not read that spreadsheet')); } };
     rd.onerror=()=>rej(new Error('Could not read the file'));
     rd.readAsArrayBuffer(file);
   });
 }
-
+/* build merged {headers, rows} from the chosen sheets & header settings */
+function buildFromSheets(sheets){
+  const parts=[]; let primaryHeaders=null;
+  sheets.filter(s=>s.include).forEach(s=>{
+    if(s.hasHeader){
+      const p=gridToParsed(s.grid,'Excel');
+      if(p){ if(!primaryHeaders) primaryHeaders=p.headers; parts.push({headers:p.headers, rows:p.rows}); }
+    } else {
+      const rows=s.grid.filter(r=> r && !r.every(c=>String(c==null?'':c).trim()===''))
+                       .map(r=> r.map(c=> String(c==null?'':c).trim()));
+      parts.push({headers:null, rows});
+    }
+  });
+  return mergeSheets(parts, primaryHeaders);
+}
+function mergeSheets(parts, primaryHeaders){
+  const headers = primaryHeaders ? primaryHeaders.slice() : [];
+  parts.forEach(p=>{ if(p.headers) p.headers.forEach(h=>{ if(!headers.includes(h)) headers.push(h); }); });
+  let maxW=headers.length;
+  parts.forEach(p=>{ if(!p.headers) p.rows.forEach(r=> maxW=Math.max(maxW, r.length)); });
+  while(headers.length<maxW) headers.push('Column '+(headers.length+1));
+  const rows=[];
+  parts.forEach(p=>{
+    if(p.headers){
+      const idx=p.headers.map(h=>headers.indexOf(h));
+      p.rows.forEach(r=>{ const out=new Array(headers.length).fill(''); r.forEach((v,j)=>{ if(idx[j]>=0) out[idx[j]]=maybeDate(headers[idx[j]], v); }); rows.push(out); });
+    } else {
+      p.rows.forEach(r=>{ const out=new Array(headers.length).fill(''); r.forEach((v,j)=>{ if(j<headers.length) out[j]=maybeDate(headers[j], v); }); rows.push(out); });
+    }
+  });
+  return {headers, rows};
+}
 /* --- common: grid (array of arrays) -> {headers, rows} ---
    Header = the fullest row among the first few (skips title/blank rows). */
 /* --- Excel date serials: 45211 -> "12 Oct 2023" for date-named columns --- */
@@ -713,29 +755,76 @@ function uniqueNames(arr){
 
 /* ---------- import review / confirm ---------- */
 let pending=null;
+function stageImportExcel(sheets){
+  pending={sheets, source:'Excel'};
+  renderStage(); openImport();
+}
 function stageImport(headers, rows, source, note, warn){
-  pending={headers:headers.slice(), rows};
-  $('#ip_src').textContent=source||'File';
+  pending={headers:headers.slice(), rows, source, note, warn};
+  renderStage(); openImport();
+}
+function currentMerge(){
+  return pending.sheets ? buildFromSheets(pending.sheets) : {headers:pending.headers, rows:pending.rows};
+}
+function renderStage(){
+  const {headers, rows}=currentMerge();
+  pending.headers=headers; pending.rows=rows;
+  $('#ip_src').textContent=pending.source||'File';
   $('#ip_count').textContent=rows.length;
-  const noteEl=$('#ip_note'); noteEl.textContent=note||''; noteEl.style.display=note?'':'none';
-  noteEl.classList.toggle('warn', !!warn);
+  // note
+  let note=pending.note||'';
+  if(pending.sheets){
+    const inc=pending.sheets.filter(s=>s.include).length;
+    note=rows.length+' members from '+inc+' of '+pending.sheets.length+' tab'+(pending.sheets.length>1?'s':'')+' selected below.';
+  }
+  const noteEl=$('#ip_note'); noteEl.textContent=note; noteEl.style.display=note?'':'none';
+  noteEl.classList.toggle('warn', !!pending.warn);
+  renderSheetPanel();
+  // column rename inputs
   const cols=$('#ip_cols'); cols.innerHTML='';
-  const head=$('#ip_table'); // reference below
   headers.forEach((h,i)=>{
-    const cr=el('div','cr');
-    const b=el('b'); b.textContent=(i+1);
+    const cr=el('div','cr'); const b=el('b'); b.textContent=(i+1);
     const inp=el('input'); inp.value=h; inp.placeholder='Column '+(i+1);
     inp.oninput=()=>{ const cell=$('#ip_head_'+i); if(cell) cell.textContent=inp.value||('Column '+(i+1)); };
     cr.append(b, inp); cols.appendChild(cr);
   });
+  // preview
   const tbl=$('#ip_table'); tbl.innerHTML='';
   const hrow=el('div','pt-row pt-head');
   headers.forEach((h,i)=>{ const d=el('div','pt-cell'); d.id='ip_head_'+i; d.textContent=h; hrow.appendChild(d); });
   tbl.appendChild(hrow);
   rows.slice(0,5).forEach(r=>{ const tr=el('div','pt-row'); r.forEach(v=>{const d=el('div','pt-cell'); d.textContent=v; tr.appendChild(d);}); tbl.appendChild(tr); });
   $('#ip_more').textContent = rows.length>5 ? ('+ '+(rows.length-5)+' more rows') : '';
-  $('#ip_btn').textContent='Import '+rows.length+' member'+(rows.length>1?'s':'');
-  openImport();
+  $('#ip_btn').textContent='Import '+rows.length+' member'+(rows.length!==1?'s':'');
+}
+function renderSheetPanel(){
+  const panel=$('#ip_sheets'); if(!panel) return;
+  panel.innerHTML='';
+  if(!pending.sheets || pending.sheets.length<=1){
+    // single sheet: still allow header toggle if it looks headerless
+    if(pending.sheets && pending.sheets.length===1){
+      const s=pending.sheets[0];
+      const lbl=el('div','ip-label'); lbl.textContent='This sheet'; panel.appendChild(lbl);
+      const row=el('div','sheet-row');
+      const info=el('div','sheet-info'); const nm=el('div','sn'); nm.textContent=s.name; const meta=el('div','sm'); meta.textContent=s.rowCount+' rows'; info.append(nm,meta);
+      const hdr=el('button','sheet-hdr'); hdr.textContent=s.hasHeader?'First row: header':'First row: data';
+      hdr.onclick=()=>{ s.hasHeader=!s.hasHeader; renderStage(); };
+      row.append(info,hdr); panel.appendChild(row);
+    }
+    return;
+  }
+  const lbl=el('div','ip-label'); lbl.textContent='Tabs to import — untick any you don’t want'; panel.appendChild(lbl);
+  pending.sheets.forEach(s=>{
+    const row=el('div','sheet-row'+(s.include?'':' off'));
+    const chk=el('input'); chk.type='checkbox'; chk.checked=s.include;
+    chk.onchange=()=>{ s.include=chk.checked; renderStage(); };
+    const info=el('div','sheet-info');
+    const nm=el('div','sn'); nm.textContent=s.name;
+    const meta=el('div','sm'); meta.textContent=s.rowCount+' rows'; info.append(nm,meta);
+    const hdr=el('button','sheet-hdr'); hdr.textContent=s.hasHeader?'has header':'no header';
+    hdr.onclick=()=>{ s.hasHeader=!s.hasHeader; renderStage(); };
+    row.append(chk, info, hdr); panel.appendChild(row);
+  });
 }
 function commitImport(){
   if(!pending) return;
@@ -745,13 +834,14 @@ function commitImport(){
     : pending.headers.slice();
   headers = uniqueNames(headers);
   const rows=pending.rows;
+  if(!rows.length){ toast('Nothing selected to import', true); return; }
   const merged=[...fields]; headers.forEach(h=>{ if(!merged.includes(h)) merged.push(h); });
   fields=merged;
   rows.forEach(r=>{ const o={__id:uid()}; headers.forEach((h,j)=>o[h]=r[j]||''); members.push(o); });
   save(); refreshData(); closeImport();
-  toast(rows.length+' member'+(rows.length>1?'s':'')+' imported'); pending=null;
+  toast(rows.length+' member'+(rows.length!==1?'s':'')+' imported'); pending=null;
 }
-function openImport(){ $('#importBg').classList.add('on'); $('#importSheet').classList.add('on'); document.body.style.overflow='hidden'; }
+function openImport(){ $('#importBg').classList.add('on'); $('#importSheet').classList.add('on'); document.body.style.overflow='hidden'; $('#importSheet').scrollTop=0; }
 function closeImport(){ $('#importBg').classList.remove('on'); $('#importSheet').classList.remove('on'); document.body.style.overflow=''; pending=null; }
 $('#ip_btn').onclick=commitImport;
 $('#ip_cancel').onclick=closeImport;
@@ -909,12 +999,30 @@ function dupGroup(list, markFirstKeep){
 }
 function renderDuplicates(){
   const {exactGroups, nameGroups}=findDuplicates();
+  const nameless=members.filter(m=>!realName(m));
   const body=$('#dup_body'); body.innerHTML='';
   const total=exactGroups.length+nameGroups.length;
   const sum=$('#dup_sum');
+
+  // nameless / non-member cleanup
+  if(nameless.length){
+    const box=el('div'); box.style.cssText='background:rgba(207,113,102,.1);border:1px solid rgba(207,113,102,.4);border-radius:12px;padding:14px;margin-bottom:16px';
+    const t=el('div'); t.style.cssText='font-size:.85rem;color:#e0a49b;line-height:1.5;margin-bottom:11px';
+    t.textContent=nameless.length+' record'+(nameless.length>1?'s have':' has')+' no surname or name — usually stray rows from other tabs (totals, headings, donation entries) that inflate the member count.';
+    const b=el('button','btn danger'); b.style.width='100%';
+    b.textContent='Remove '+nameless.length+' record'+(nameless.length>1?'s':'')+' with no name';
+    b.onclick=()=>{
+      if(!confirm('Remove '+nameless.length+' record'+(nameless.length>1?'s':'')+' that have no surname or name? This cannot be undone.')) return;
+      members=members.filter(m=>realName(m)); save(); refreshData(); renderDuplicates();
+      toast(nameless.length+' record'+(nameless.length>1?'s':'')+' removed');
+    };
+    box.append(t,b); body.appendChild(box);
+  }
+
   if(!total){
-    sum.textContent='No duplicates found';
-    body.innerHTML='<div class="empty"><div class="ic">✓</div>Your registry looks clean — no repeated records or matching full names.</div>';
+    sum.textContent = nameless.length ? (nameless.length+' record'+(nameless.length>1?'s':'')+' with no name') : 'No duplicates found';
+    if(!nameless.length){ body.innerHTML='<div class="empty"><div class="ic">✓</div>Your registry looks clean — no repeated records or matching full names.</div>'; }
+    else { const e=el('div','empty'); e.style.padding='16px 10px'; e.textContent='No duplicate names found.'; body.appendChild(e); }
     $('#dup_auto').classList.add('hide');
     return;
   }
