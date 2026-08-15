@@ -210,6 +210,9 @@
   .sheet-info .sn{font-size:.92rem;font-weight:600;line-height:1.2}
   .sheet-info .sm{font-family:'DM Mono',monospace;font-size:.68rem;color:var(--muted);margin-top:3px;letter-spacing:.03em}
   .sheet-hdr{background:var(--bg-3);border:1px solid var(--border-str);color:var(--gold);border-radius:8px;padding:7px 12px;font-size:.7rem;cursor:pointer;flex:0 0 auto;font-family:'DM Mono',monospace;letter-spacing:.04em}
+  .ip-skip{display:flex;align-items:center;gap:11px;margin-bottom:18px;cursor:pointer;font-size:.9rem;color:var(--text);background:rgba(201,168,106,.05);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+  .ip-skip input{width:20px;height:20px;accent-color:var(--gold);flex:0 0 auto}
+  .ip-skip .sub{color:var(--gold-dim);font-family:'DM Mono',monospace;font-size:.74rem}
   /* editable column rename list */
   .colrename{display:flex;flex-direction:column;gap:9px;margin-bottom:18px}
   .colrename .cr{display:flex;align-items:center;gap:11px}
@@ -389,6 +392,7 @@
   <div class="sbody">
     <div id="ip_note" class="ip-note"></div>
     <div id="ip_sheets"></div>
+    <label class="ip-skip hide" id="ip_skiprow"><input type="checkbox" id="ip_skipnn" checked/><span id="ip_skiplbl">Skip rows with no name</span></label>
     <div class="ip-label">Column names — tap any to rename before importing</div>
     <div class="colrename" id="ip_cols"></div>
     <div class="ip-label">Preview</div>
@@ -755,23 +759,47 @@ function uniqueNames(arr){
 
 /* ---------- import review / confirm ---------- */
 let pending=null;
+/* find surname/name column indexes within an arbitrary header list */
+function detectNameCols(headers){
+  const low=headers.map((h,i)=>({i, l:String(h).toLowerCase().trim()}));
+  const find=(tests)=>{ for(const t of tests){ const hit=low.find(o=>t(o.l)); if(hit) return hit.i; } return -1; };
+  const sur=find([ l=>l==='surname'||l==='sur name'||l==='last name'||l==='family name', l=>l.includes('surname')||l.includes('last name')||l.includes('family name') ]);
+  const surL = sur>=0 ? low[sur].l : '\u0000';
+  const name=find([ l=>l==='name'||l==='member name'||l==='full name'||l==='first name'||l==='given name',
+    l=> l!==surL && l.includes('name') && !l.includes('father') && !l.includes('spouse') && !l.includes('guardian') && !l.includes('sur') && !l.includes('last') && !l.includes('family') ]);
+  return {sur, name};
+}
 function stageImportExcel(sheets){
-  pending={sheets, source:'Excel'};
+  pending={sheets, source:'Excel', skipNameless:true};
   renderStage(); openImport();
 }
 function stageImport(headers, rows, source, note, warn){
-  pending={headers:headers.slice(), rows, source, note, warn};
+  pending={headers:headers.slice(), rows, source, note, warn, skipNameless:true};
   renderStage(); openImport();
 }
 function currentMerge(){
-  return pending.sheets ? buildFromSheets(pending.sheets) : {headers:pending.headers, rows:pending.rows};
+  return pending.sheets ? buildFromSheets(pending.sheets) : {headers:pending.headers.slice(), rows:pending.rows};
 }
 function renderStage(){
-  const {headers, rows}=currentMerge();
+  let {headers, rows}=currentMerge();
+  const raw=rows.length;
+  // skip rows with no name (headings/totals/footers) — only when a name column exists
+  const {sur, name}=detectNameCols(headers);
+  const canSkip=(sur>=0 || name>=0);
+  const skipRow=$('#ip_skiprow'), chk=$('#ip_skipnn');
+  if(canSkip){
+    skipRow.classList.remove('hide');
+    chk.checked = pending.skipNameless!==false;
+    if(pending.skipNameless!==false){
+      rows=rows.filter(r=> (sur>=0 && String(r[sur]||'').trim()) || (name>=0 && String(r[name]||'').trim()) );
+    }
+  } else skipRow.classList.add('hide');
+  const skipped=raw-rows.length;
+  $('#ip_skiplbl').innerHTML='Skip rows with no name'+(skipped>0? ' <span class="sub">('+skipped+' skipped)</span>':'');
+
   pending.headers=headers; pending.rows=rows;
   $('#ip_src').textContent=pending.source||'File';
   $('#ip_count').textContent=rows.length;
-  // note
   let note=pending.note||'';
   if(pending.sheets){
     const inc=pending.sheets.filter(s=>s.include).length;
@@ -780,7 +808,6 @@ function renderStage(){
   const noteEl=$('#ip_note'); noteEl.textContent=note; noteEl.style.display=note?'':'none';
   noteEl.classList.toggle('warn', !!pending.warn);
   renderSheetPanel();
-  // column rename inputs
   const cols=$('#ip_cols'); cols.innerHTML='';
   headers.forEach((h,i)=>{
     const cr=el('div','cr'); const b=el('b'); b.textContent=(i+1);
@@ -788,7 +815,6 @@ function renderStage(){
     inp.oninput=()=>{ const cell=$('#ip_head_'+i); if(cell) cell.textContent=inp.value||('Column '+(i+1)); };
     cr.append(b, inp); cols.appendChild(cr);
   });
-  // preview
   const tbl=$('#ip_table'); tbl.innerHTML='';
   const hrow=el('div','pt-row pt-head');
   headers.forEach((h,i)=>{ const d=el('div','pt-cell'); d.id='ip_head_'+i; d.textContent=h; hrow.appendChild(d); });
@@ -844,6 +870,7 @@ function commitImport(){
 function openImport(){ $('#importBg').classList.add('on'); $('#importSheet').classList.add('on'); document.body.style.overflow='hidden'; $('#importSheet').scrollTop=0; }
 function closeImport(){ $('#importBg').classList.remove('on'); $('#importSheet').classList.remove('on'); document.body.style.overflow=''; pending=null; }
 $('#ip_btn').onclick=commitImport;
+$('#ip_skipnn').onchange=()=>{ if(pending){ pending.skipNameless=$('#ip_skipnn').checked; renderStage(); } };
 $('#ip_cancel').onclick=closeImport;
 $('#ip_cancel2').onclick=closeImport;
 $('#importBg').onclick=closeImport;
