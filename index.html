@@ -350,7 +350,7 @@
       <div class="eyebrow">Search registry</div>
       <div class="searchbar">
         <span class="mag">⌕</span>
-        <input id="q" placeholder="Search by name, number, phone, any field…" autocomplete="off"/>
+        <input id="q" placeholder="Search by surname or name…" autocomplete="off"/>
         <button class="clearx hide" id="clearQ">×</button>
       </div>
       <div class="results" id="results"></div>
@@ -1119,7 +1119,15 @@ function runSearch(){
   }
   let list = members;
   if(q){
-    list = members.filter(m => fields.some(f => String(m[f]||'').toLowerCase().includes(q)));
+    list = members.filter(m => {
+      let hay;
+      if(surnameKey || nameKey){
+        hay = ((surnameKey && m[surnameKey] ? m[surnameKey]+' ' : '') + (nameKey && m[nameKey] ? m[nameKey] : '')).toLowerCase();
+      } else {
+        hay = String(displayName(m)).toLowerCase();
+      }
+      return hay.includes(q);
+    });
   }
   // sort by display name
   list = [...list].sort((a,b)=> displayName(a).localeCompare(displayName(b)));
