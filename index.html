@@ -896,7 +896,7 @@ $('#backupBtn').onclick = ()=>{
   const safe=((society&&society.name)||'sadasya').replace(/[^\w]+/g,'_').slice(0,40);
   a.href=url; a.download=safe+'_backup.json'; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1500);
-  toast('Backup file downloaded');
+  toast('Backup saved — society details + '+members.length+' member'+(members.length!==1?'s':''));
 };
 
 /* ---------- JSON import / restore ---------- */
@@ -915,7 +915,7 @@ async function importJson(file){
   stageImport(headers, rows, 'JSON', 'Imported from a JSON export.');
 }
 function restoreBackup(obj){
-  society = obj.society || {name:'My Society', addr:'', reg:''};
+  society = obj.society || {name:'My Society', addr:'', reg:'', logo:''};
   fields  = Array.isArray(obj.fields) ? obj.fields.slice() : [];
   members = (obj.members||[]).map(m=> m.__id ? m : {...m, __id:uid()});
   if(!fields.length && members.length){
@@ -923,7 +923,8 @@ function restoreBackup(obj){
   }
   localStorage.setItem(LS.society, JSON.stringify(society));
   save(); closeImport(); route();
-  toast('Backup restored — '+members.length+' member'+(members.length!==1?'s':''));
+  const sn = society && society.name ? '“'+society.name+'” · ' : '';
+  toast('Restored '+sn+members.length+' member'+(members.length!==1?'s':''));
 }
 $('#setupRestore').onclick = ()=> $('#restoreFile').click();
 $('#restoreFile').onchange = e=>{ const f=e.target.files[0]; if(f) importJson(f); e.target.value=''; };
