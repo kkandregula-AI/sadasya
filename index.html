@@ -1424,15 +1424,17 @@ function buildCardNode(m, photo){
   const wrap=document.createElement('div');
   wrap.style.cssText='position:fixed;left:-9999px;top:0;width:680px;height:1080px;box-sizing:border-box;background:linear-gradient(170deg,#12100b,#0a0908 60%);border:2px solid '+GOLD+';border-radius:30px;overflow:hidden;font-family:\'DM Sans\',sans-serif;color:'+TXT+';display:flex;flex-direction:column;';
   const glow=document.createElement('div'); glow.style.cssText='position:absolute;top:-120px;right:-120px;width:360px;height:360px;border-radius:50%;background:radial-gradient(circle,rgba(201,168,106,.18),transparent 70%)'; wrap.appendChild(glow);
-  const head=document.createElement('div'); head.style.cssText='display:flex;align-items:center;gap:16px;padding:32px 36px 18px';
+  const head=document.createElement('div'); head.style.cssText='display:flex;align-items:flex-start;gap:16px;padding:30px 34px 16px';
   const logo=societyLogo();
-  if(logo){ const lg=document.createElement('img'); lg.src=logo; lg.style.cssText='width:74px;height:74px;border-radius:16px;object-fit:cover;border:2px solid rgba(201,168,106,.55);box-shadow:0 6px 18px -8px rgba(201,168,106,.6)'; head.appendChild(lg); }
+  if(logo){ const lg=document.createElement('img'); lg.src=logo; lg.style.cssText='width:78px;height:78px;border-radius:16px;object-fit:cover;border:2px solid rgba(201,168,106,.55);box-shadow:0 6px 18px -8px rgba(201,168,106,.6);flex:0 0 auto'; head.appendChild(lg); }
   const htxt=document.createElement('div'); htxt.style.cssText='flex:1;min-width:0';
-  htxt.innerHTML='<div style="font-family:\'Cinzel\',serif;font-weight:700;font-size:21px;line-height:1.15;color:'+GOLDB+'">'+((society&&society.name)||'Membership')+'</div>'
-    +'<div style="font-family:\'DM Mono\',monospace;font-size:11px;letter-spacing:4px;color:'+MUT+';margin-top:7px">MEMBERSHIP CARD</div>';
+  htxt.innerHTML='<div style="font-family:\'Cinzel\',serif;font-weight:700;font-size:21px;line-height:1.14;color:'+GOLDB+'">'+((society&&society.name)||'Membership')+'</div>'
+    +((society&&society.addr)?('<div style="font-size:11.5px;line-height:1.42;color:'+MUT+';margin-top:8px">'+society.addr+'</div>'):'')
+    +((society&&society.reg)?('<div style="display:inline-block;font-family:\'DM Mono\',monospace;font-size:11px;letter-spacing:.5px;color:'+GOLDB+';background:rgba(201,168,106,.1);border:1px solid rgba(201,168,106,.35);padding:5px 12px;border-radius:999px;margin-top:11px">Reg. No. '+society.reg+'</div>'):'');
   head.appendChild(htxt); wrap.appendChild(head);
-  const rule=document.createElement('div'); rule.style.cssText='height:1px;margin:0 36px;background:linear-gradient(90deg,transparent,rgba(201,168,106,.5),transparent)'; wrap.appendChild(rule);
-  const pf=document.createElement('div'); pf.style.cssText='width:230px;height:230px;margin:30px auto 0;border-radius:26px;overflow:hidden;border:3px solid '+GOLD+';box-shadow:0 14px 34px -14px rgba(201,168,106,.6);display:grid;place-items:center;background:linear-gradient(150deg,'+GOLDB+','+DIM+')';
+  const rule=document.createElement('div'); rule.style.cssText='height:1px;margin:0 34px;background:linear-gradient(90deg,transparent,rgba(201,168,106,.5),transparent)'; wrap.appendChild(rule);
+  const eyebrow=document.createElement('div'); eyebrow.style.cssText='text-align:center;font-family:\'DM Mono\',monospace;font-size:10px;letter-spacing:5px;color:'+MUT+';margin-top:15px'; eyebrow.textContent='MEMBERSHIP CARD'; wrap.appendChild(eyebrow);
+  const pf=document.createElement('div'); pf.style.cssText='width:220px;height:220px;margin:20px auto 0;border-radius:26px;overflow:hidden;border:3px solid '+GOLD+';box-shadow:0 14px 34px -14px rgba(201,168,106,.6);display:grid;place-items:center;background:linear-gradient(150deg,'+GOLDB+','+DIM+')';
   if(photo){ const im=document.createElement('img'); im.src=photo; im.style.cssText='width:100%;height:100%;object-fit:cover'; pf.appendChild(im); }
   else { const mo=document.createElement('div'); mo.textContent=initials(displayName(m)); mo.style.cssText='font-family:\'Cinzel\',serif;font-weight:600;font-size:76px;color:#241b0d'; pf.appendChild(mo); }
   wrap.appendChild(pf);
@@ -1454,18 +1456,12 @@ function buildCardNode(m, photo){
   if(mob) addRow('Mobile', mob.value);
   if(place) addRow(place.label.length<16?place.label:'Place', place.value);
   wrap.appendChild(det);
-  if(society&&society.addr){
-    const adWrap=document.createElement('div'); adWrap.style.cssText='margin:20px 40px 0;padding-top:16px;border-top:1px solid rgba(201,168,106,.14);text-align:center';
-    adWrap.innerHTML='<div style="font-family:\'DM Mono\',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:'+DIM+';margin-bottom:6px">Sangham Address</div><div style="font-size:12.5px;line-height:1.5;color:'+MUT+'">'+society.addr+'</div>';
-    wrap.appendChild(adWrap);
-  }
   const foot=document.createElement('div'); foot.style.cssText='margin-top:auto;display:flex;align-items:flex-end;justify-content:space-between;padding:26px 36px 30px';
   const qrWrap=document.createElement('div'); qrWrap.style.cssText='background:#fff;padding:9px;border-radius:12px;width:138px;height:138px;display:grid;place-items:center';
   const qr=document.createElement('div'); qr.id='cardqr'; qrWrap.appendChild(qr); foot.appendChild(qrWrap);
   const fr=document.createElement('div'); fr.style.cssText='text-align:right';
-  fr.innerHTML=(society&&society.reg?('<div style="font-family:\'DM Mono\',monospace;font-size:12px;color:'+GOLDB+'">Reg. No. '+society.reg+'</div>'):'')
-    +'<div style="font-family:\'DM Mono\',monospace;font-size:10px;letter-spacing:2px;color:'+DIM+';margin-top:8px">ISSUED '+new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}).toUpperCase()+'</div>'
-    +'<div style="font-family:\'Cinzel\',serif;font-size:13px;letter-spacing:3px;color:'+MUT+';margin-top:10px">SADASYA</div>';
+  fr.innerHTML='<div style="font-family:\'DM Mono\',monospace;font-size:11px;letter-spacing:2px;color:'+DIM+'">ISSUED '+new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}).toUpperCase()+'</div>'
+    +'<div style="font-family:\'Cinzel\',serif;font-size:14px;letter-spacing:3px;color:'+MUT+';margin-top:12px">SADASYA</div>';
   foot.appendChild(fr); wrap.appendChild(foot);
   return wrap;
 }
