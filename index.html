@@ -253,6 +253,10 @@
   /* ---------- Install / footer ---------- */
   .foot{margin-top:26px;text-align:center;color:var(--faint);font-size:.72rem;line-height:1.7;letter-spacing:.02em}
   .foot .made{color:var(--gold-dim)}
+  /* edit lock */
+  .lockbtn{margin-left:auto;flex:0 0 auto;width:42px;height:42px;border-radius:12px;background:var(--bg-3);border:1px solid var(--border-str);color:var(--muted);font-size:1.05rem;cursor:pointer;display:grid;place-items:center}
+  .lockbtn.on{color:var(--gold);border-color:var(--gold);background:rgba(201,168,106,.08)}
+  .viewbadge{font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.18em;text-transform:uppercase;color:var(--faint);margin-top:4px}
   /* member photo in detail sheet */
   .photo-area{display:flex;flex-direction:column;align-items:center;gap:9px;padding:2px 0 18px;border-bottom:1px solid var(--border);margin-bottom:8px}
   .photo-frame{position:relative;width:112px;height:112px;border-radius:18px;overflow:hidden;border:2px solid var(--gold);background:linear-gradient(150deg,var(--gold-bright),var(--gold-dim));display:grid;place-items:center;box-shadow:0 10px 26px -12px rgba(201,168,106,.6)}
@@ -287,6 +291,7 @@
       <h1>SADASYA</h1>
       <p>Membership Registry</p>
     </div>
+    <button id="lockBtn" class="lockbtn" title="Edit access">🔒</button>
   </div>
 
   <!-- ============ SETUP (first run) ============ -->
@@ -488,6 +493,8 @@ const LS = {
 const $ = s => document.querySelector(s);
 const el = (t,c)=>{const e=document.createElement(t); if(c)e.className=c; return e;};
 
+const EDIT_PIN = '1991';
+let editMode = sessionStorage.getItem('sadasya.edit')==='1';
 let society = load(LS.society) || DEFAULT_SOCIETY;
 let members = load(LS.members) || [];
 let fields  = load(LS.fields)  || [];
@@ -630,6 +637,7 @@ function refreshData(){
   $('#dropTitle').textContent = has ? 'Add more members' : 'Load membership file';
   $('#dropSub').textContent = has ? 'Upload an Excel or JSON containing only the new members — they are appended; existing members stay.' : 'Tap to choose an Excel or JSON file';
   $('#dataActions').classList.toggle('hide', !(has || fields.length>0));
+  applyMode();
   runSearch();
 }
 
@@ -1205,11 +1213,14 @@ function renderDetail(m){
   foot.innerHTML=''; foot.style.flexDirection='column';
   const cardB=el('button','btn primary'); cardB.style.width='100%'; cardB.textContent='⬇ Membership ID card';
   cardB.onclick=()=>makeCard(m);
-  const rowEl=el('div','row'); rowEl.style.marginTop='10px'; rowEl.style.width='100%';
-  const editB=el('button','btn ghost grow'); editB.textContent='Edit'; editB.onclick=()=>renderEdit(m);
-  const delB=el('button','btn danger'); delB.textContent='Delete'; delB.onclick=()=>deleteMember(m.__id);
-  rowEl.append(editB, delB);
-  foot.append(cardB, rowEl);
+  foot.append(cardB);
+  if(isEdit()){
+    const rowEl=el('div','row'); rowEl.style.marginTop='10px'; rowEl.style.width='100%';
+    const editB=el('button','btn ghost grow'); editB.textContent='Edit'; editB.onclick=()=>renderEdit(m);
+    const delB=el('button','btn danger'); delB.textContent='Delete'; delB.onclick=()=>deleteMember(m.__id);
+    rowEl.append(editB, delB);
+    foot.append(rowEl);
+  }
 }
 let photoTarget=null;
 function renderPhotoArea(m){
@@ -1217,15 +1228,20 @@ function renderPhotoArea(m){
   const frame=el('div','photo-frame');
   const mono=el('div','photo-mono'); mono.textContent=initials(displayName(m)); frame.appendChild(mono);
   const img=el('img','photo-img hide'); frame.appendChild(img);
-  const cam=el('button','photo-cam'); cam.innerHTML='📷'; cam.title='Add / change photo';
-  cam.onclick=()=>{ photoTarget=m; $('#photoFile').click(); };
-  frame.appendChild(cam); wrap.appendChild(frame);
-  const hint=el('div','photo-hint'); hint.textContent='Tap the camera to add a photo'; wrap.appendChild(hint);
+  if(isEdit()){
+    const cam=el('button','photo-cam'); cam.innerHTML='📷'; cam.title='Add / change photo';
+    cam.onclick=()=>{ photoTarget=m; $('#photoFile').click(); };
+    frame.appendChild(cam);
+  }
+  wrap.appendChild(frame);
+  let hint=null;
+  if(isEdit()){ hint=el('div','photo-hint'); hint.textContent='Tap the camera to add a photo'; wrap.appendChild(hint); }
   getPhoto(m).then(p=>{
-    if(p){ img.src=p; img.classList.remove('hide'); mono.classList.add('hide'); hint.remove();
-      const rm=el('button','photo-rm'); rm.textContent='Remove photo';
-      rm.onclick=async()=>{ if(!confirm('Remove this photo?')) return; await removePhoto(m); renderDetail(m); toast('Photo removed'); };
-      wrap.appendChild(rm);
+    if(p){ img.src=p; img.classList.remove('hide'); mono.classList.add('hide'); if(hint) hint.remove();
+      if(isEdit()){ const rm=el('button','photo-rm'); rm.textContent='Remove photo';
+        rm.onclick=async()=>{ if(!confirm('Remove this photo?')) return; await removePhoto(m); renderDetail(m); toast('Photo removed'); };
+        wrap.appendChild(rm);
+      }
     }
   });
   return wrap;
@@ -1479,6 +1495,27 @@ async function makeCard(m){
     canvas.toBlob(blob=>{ if(!blob){ toast('Could not generate the card', true); return; } showCardResult(blob, m); }, 'image/png');
   }catch(e){ console.error(e); node.remove(); toast('Could not generate the card', true); }
 }
+
+/* ============================================================
+   VIEW-ONLY vs EDIT MODE — everyone can view, search, export and
+   print ID cards. Editing (add/update/delete/import-changes/fields/
+   duplicates/clear/society) is unlocked only with the edit PIN.
+   ============================================================ */
+function applyMode(){
+  const on=editMode;
+  const lb=$('#lockBtn'); if(lb){ lb.textContent=on?'🔓':'🔒'; lb.classList.toggle('on', on); lb.title=on?'Edit mode — tap to lock':'View only — tap to unlock editing'; }
+  ['#addBtn','#fieldsBtn','#dupBtn','#clearBtn','#editSociety'].forEach(sel=>{ const e=$(sel); if(e) e.classList.toggle('hide', !on); });
+}
+function isEdit(){ return editMode; }
+$('#lockBtn').onclick=()=>{
+  const reRender=()=>{ if($('#sheet').classList.contains('on') && activeId){ const m=members.find(x=>x.__id===activeId); if(m) renderDetail(m); } };
+  if(editMode){ editMode=false; sessionStorage.removeItem('sadasya.edit'); applyMode(); reRender(); toast('View-only mode'); return; }
+  const pin=prompt('Enter edit PIN to make changes:');
+  if(pin===null) return;
+  if(pin===EDIT_PIN){ editMode=true; sessionStorage.setItem('sadasya.edit','1'); applyMode(); reRender(); toast('Edit mode unlocked'); }
+  else toast('Incorrect PIN — still view only', true);
+};
+applyMode();
 
 /* ---------- go ---------- */
 route();
