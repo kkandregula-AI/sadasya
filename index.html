@@ -350,12 +350,15 @@
         <div class="hint">.xlsx · .csv · .json — every sheet/tab is read, first row = headers</div>
       </div>
       <input type="file" id="file" accept=".xlsx,.xls,.csv,.json,application/json" class="hide"/>
+      <input type="file" id="photosFile" accept=".json,application/json" class="hide"/>
       <div class="row" id="dataActions" style="margin-top:14px">
         <button class="btn sm ghost" id="addBtn">＋ Add member</button>
         <button class="btn sm ghost" id="fieldsBtn">⚙ Fields</button>
         <button class="btn sm ghost" id="dupBtn">⧉ Duplicates</button>
         <button class="btn sm ghost" id="exportBtn">⤒ Export Excel</button>
         <button class="btn sm ghost" id="backupBtn">⤓ Backup (JSON)</button>
+        <button class="btn sm ghost" id="photoExportBtn">📷 Export photos</button>
+        <button class="btn sm ghost" id="photoImportBtn">📷 Import photos</button>
         <button class="btn sm ghost danger" id="clearBtn">Clear data</button>
       </div>
     </div>
@@ -924,6 +927,7 @@ async function importJson(file){
   let obj;
   try{ obj=JSON.parse(await file.text()); }
   catch(e){ toast('That JSON file isn\u2019t valid', true); return; }
+  if(obj && obj.app==='sadasya-photos' && obj.photos){ await applyPhotosImport(obj); return; }
   if(obj && obj.app==='sadasya' && Array.isArray(obj.members)){
     if(!confirm('Restore this backup? It will replace the society details and all members currently on this device.')) return;
     restoreBackup(obj); return;
@@ -1129,7 +1133,11 @@ function realName(m){
   if(nameKey && m[nameKey] && String(m[nameKey]).trim()) parts.push(String(m[nameKey]).trim());
   return parts.join(' ').trim();
 }
-function displaySub(m){ return subKey && m[subKey] ? m[subKey] : ''; }
+function displaySub(m){
+  // show a mobile number under the name, preferring Mobile No2 then No1
+  const mob=mobileField(m); if(mob) return mob.value;
+  return subKey && m[subKey] ? m[subKey] : '';
+}
 
 function runSearch(){
   const box=$('#results');
@@ -1404,6 +1412,41 @@ async function getPhoto(m){ return await idbGet('photo:'+m.__id); }
 async function setPhoto(m,url){ await idbSet('photo:'+m.__id,url); m.photo=true; save(); }
 async function removePhoto(m){ await idbDel('photo:'+m.__id); delete m.photo; save(); }
 
+/* ---- photo backup / restore (separate file, linked by member id) ---- */
+async function exportPhotos(){
+  const withP = members.filter(m=>m.photo);
+  if(!withP.length){ toast('No photos to export yet', true); return; }
+  toast('Gathering photos…');
+  const photos={}; let n=0;
+  for(const m of withP){ const p=await getPhoto(m); if(p){ photos[m.__id]=p; n++; } }
+  if(!n){ toast('No photos found to export', true); return; }
+  const obj={ app:'sadasya-photos', version:1, exportedAt:new Date().toISOString(), count:n, photos };
+  const blob=new Blob([JSON.stringify(obj)],{type:'application/json'});
+  const url=URL.createObjectURL(blob); const a=document.createElement('a');
+  const safe=((society&&society.name)||'sadasya').replace(/[^\w]+/g,'_').slice(0,40);
+  a.href=url; a.download=safe+'_photos.json'; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),2500);
+  toast(n+' photo'+(n!==1?'s':'')+' exported');
+}
+async function applyPhotosImport(obj){
+  const photos=obj.photos||{}; const ids=Object.keys(photos);
+  if(!ids.length){ toast('No photos in that file', true); return; }
+  toast('Linking photos…');
+  let matched=0, pending=0;
+  for(const id of ids){
+    await idbSet('photo:'+id, photos[id]);               // store on device, keyed by member id
+    if(typeof cloudUploadPhoto==='function') cloudUploadPhoto(id, photos[id]);
+    const m=members.find(x=>x.__id===id);
+    if(m){ m.photo=true; if(typeof cloudUpsertMember==='function') cloudUpsertMember(m); matched++; }
+    else pending++;                                       // kept for when that member is imported later
+  }
+  save(); refreshData();
+  toast(matched+' photo'+(matched!==1?'s':'')+' linked'+(pending?(' · '+pending+' waiting for their member record'):''));
+}
+$('#photoExportBtn').onclick=exportPhotos;
+$('#photoImportBtn').onclick=()=>$('#photosFile').click();
+$('#photosFile').onchange=e=>{ const f=e.target.files[0]; if(f) importJson(f); e.target.value=''; };
+
 /* ============================================================
    ID CARD — elegant membership card, saved/shared as PNG
    ============================================================ */
@@ -1412,9 +1455,14 @@ function cardField(m, regexes){
   for(const rx of regexes){ const f=fields.find(h=>rx.test(String(h).toLowerCase())); if(f && m[f] && String(m[f]).trim()) return {label:f, value:maybeDate(f, m[f])}; }
   return null;
 }
+/* Mobile: prefer Mobile No2, then Mobile No1, then any phone/contact */
+function mobileField(m){
+  return cardField(m,[/mobile\s*no\.?\s*2/,/mobile\s*2/]) ||
+         cardField(m,[/mobile\s*no\.?\s*1/,/mobile\s*1/,/^mobile/,/mobile/,/phone/,/contact/]);
+}
 function buildQR(container, m){
   if(typeof QRCode==='undefined') return;
-  const tel=(cardField(m,[/mobile\s*no\s*1/,/mobile/,/phone/,/contact/])||{}).value||'';
+  const tel=(mobileField(m)||{}).value||'';
   const v='BEGIN:VCARD\nVERSION:3.0\nFN:'+displayName(m)+'\nTEL:'+String(tel).replace(/[^\d+]/g,'')+'\nORG:'+((society&&society.name)||'')+'\nEND:VCARD';
   container.innerHTML='';
   new QRCode(container,{text:v, width:120, height:120, colorDark:'#0a0908', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M});
@@ -1424,17 +1472,17 @@ function buildCardNode(m, photo){
   const wrap=document.createElement('div');
   wrap.style.cssText='position:fixed;left:-9999px;top:0;width:680px;height:1080px;box-sizing:border-box;background:linear-gradient(170deg,#12100b,#0a0908 60%);border:2px solid '+GOLD+';border-radius:30px;overflow:hidden;font-family:\'DM Sans\',sans-serif;color:'+TXT+';display:flex;flex-direction:column;';
   const glow=document.createElement('div'); glow.style.cssText='position:absolute;top:-120px;right:-120px;width:360px;height:360px;border-radius:50%;background:radial-gradient(circle,rgba(201,168,106,.18),transparent 70%)'; wrap.appendChild(glow);
-  const head=document.createElement('div'); head.style.cssText='display:flex;align-items:flex-start;gap:16px;padding:30px 34px 16px';
+  const head=document.createElement('div'); head.style.cssText='display:flex;flex-direction:column;align-items:center;text-align:center;padding:42px 44px 22px';
   const logo=societyLogo();
-  if(logo){ const lg=document.createElement('img'); lg.src=logo; lg.style.cssText='width:78px;height:78px;border-radius:16px;object-fit:cover;border:2px solid rgba(201,168,106,.55);box-shadow:0 6px 18px -8px rgba(201,168,106,.6);flex:0 0 auto'; head.appendChild(lg); }
-  const htxt=document.createElement('div'); htxt.style.cssText='flex:1;min-width:0';
-  htxt.innerHTML='<div style="font-family:\'Cinzel\',serif;font-weight:700;font-size:21px;line-height:1.14;color:'+GOLDB+'">'+((society&&society.name)||'Membership')+'</div>'
-    +((society&&society.addr)?('<div style="font-size:11.5px;line-height:1.42;color:'+MUT+';margin-top:8px">'+society.addr+'</div>'):'')
-    +((society&&society.reg)?('<div style="display:inline-block;font-family:\'DM Mono\',monospace;font-size:11px;letter-spacing:.5px;color:'+GOLDB+';background:rgba(201,168,106,.1);border:1px solid rgba(201,168,106,.35);padding:5px 12px;border-radius:999px;margin-top:11px">Reg. No. '+society.reg+'</div>'):'');
+  if(logo){ const lg=document.createElement('img'); lg.src=logo; lg.style.cssText='width:128px;height:128px;border-radius:22px;object-fit:cover;border:3px solid rgba(201,168,106,.6);box-shadow:0 12px 32px -10px rgba(201,168,106,.7)'; head.appendChild(lg); }
+  const htxt=document.createElement('div'); htxt.style.cssText='width:100%';
+  htxt.innerHTML='<div style="font-family:\'Cinzel\',serif;font-weight:700;font-size:31px;line-height:1.18;color:'+GOLDB+';margin-top:22px">'+((society&&society.name)||'Membership')+'</div>'
+    +((society&&society.addr)?('<div style="font-size:14.5px;line-height:1.5;color:'+MUT+';margin-top:13px;max-width:92%;margin-left:auto;margin-right:auto">'+society.addr+'</div>'):'')
+    +((society&&society.reg)?('<div style="display:inline-block;font-family:\'DM Mono\',monospace;font-size:13px;letter-spacing:.5px;color:'+GOLDB+';background:rgba(201,168,106,.1);border:1px solid rgba(201,168,106,.35);padding:8px 18px;border-radius:999px;margin-top:17px">Reg. No. '+society.reg+'</div>'):'');
   head.appendChild(htxt); wrap.appendChild(head);
-  const rule=document.createElement('div'); rule.style.cssText='height:1px;margin:0 34px;background:linear-gradient(90deg,transparent,rgba(201,168,106,.5),transparent)'; wrap.appendChild(rule);
-  const eyebrow=document.createElement('div'); eyebrow.style.cssText='text-align:center;font-family:\'DM Mono\',monospace;font-size:10px;letter-spacing:5px;color:'+MUT+';margin-top:15px'; eyebrow.textContent='MEMBERSHIP CARD'; wrap.appendChild(eyebrow);
-  const pf=document.createElement('div'); pf.style.cssText='width:220px;height:220px;margin:20px auto 0;border-radius:26px;overflow:hidden;border:3px solid '+GOLD+';box-shadow:0 14px 34px -14px rgba(201,168,106,.6);display:grid;place-items:center;background:linear-gradient(150deg,'+GOLDB+','+DIM+')';
+  const rule=document.createElement('div'); rule.style.cssText='height:1px;margin:2px 44px 0;background:linear-gradient(90deg,transparent,rgba(201,168,106,.5),transparent)'; wrap.appendChild(rule);
+  const eyebrow=document.createElement('div'); eyebrow.style.cssText='text-align:center;font-family:\'DM Mono\',monospace;font-size:11px;letter-spacing:6px;color:'+MUT+';margin-top:18px'; eyebrow.textContent='MEMBERSHIP CARD'; wrap.appendChild(eyebrow);
+  const pf=document.createElement('div'); pf.style.cssText='width:230px;height:230px;margin:22px auto 0;border-radius:26px;overflow:hidden;border:3px solid '+GOLD+';box-shadow:0 14px 34px -14px rgba(201,168,106,.6);display:grid;place-items:center;background:linear-gradient(150deg,'+GOLDB+','+DIM+')';
   if(photo){ const im=document.createElement('img'); im.src=photo; im.style.cssText='width:100%;height:100%;object-fit:cover'; pf.appendChild(im); }
   else { const mo=document.createElement('div'); mo.textContent=initials(displayName(m)); mo.style.cssText='font-family:\'Cinzel\',serif;font-weight:600;font-size:76px;color:#241b0d'; pf.appendChild(mo); }
   wrap.appendChild(pf);
@@ -1451,10 +1499,13 @@ function buildCardNode(m, photo){
   const det=document.createElement('div'); det.style.cssText='margin:24px 48px 0;display:flex;flex-direction:column;gap:12px';
   const addRow=(label,val)=>{ if(!val) return; const r=document.createElement('div'); r.style.cssText='display:flex;justify-content:space-between;gap:16px;border-bottom:1px solid rgba(201,168,106,.14);padding-bottom:11px';
     r.innerHTML='<span style="font-family:\'DM Mono\',monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:'+MUT+'">'+label+'</span><span style="font-size:15px;color:'+TXT+';text-align:right">'+val+'</span>'; det.appendChild(r); };
-  const mob=cardField(m,[/mobile\s*no\s*1/,/mobile/,/phone/,/contact/]);
-  const place=cardField(m,[/place/,/area/,/city/,/village/]);
+  // full-width block for long values (addresses) — font eases down and lines are clamped so it never crowds the footer
+  const addBlock=(label,val)=>{ if(!val) return; const L=String(val).length; const fs = L>150?12.5 : L>100?13.5 : 14.5; const r=document.createElement('div'); r.style.cssText='border-bottom:1px solid rgba(201,168,106,.14);padding-bottom:12px';
+    r.innerHTML='<div style="font-family:\'DM Mono\',monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:'+MUT+';margin-bottom:6px">'+label+'</div><div style="font-size:'+fs+'px;line-height:1.5;color:'+TXT+';display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden">'+val+'</div>'; det.appendChild(r); };
+  const mob=mobileField(m);
+  const place=cardField(m,[/place/,/area/,/city/,/village/,/address/]);
   if(mob) addRow('Mobile', mob.value);
-  if(place) addRow(place.label.length<16?place.label:'Place', place.value);
+  if(place){ const lbl=place.label.length<16?place.label:'Place'; if(String(place.value).length>34) addBlock(lbl, place.value); else addRow(lbl, place.value); }
   wrap.appendChild(det);
   const foot=document.createElement('div'); foot.style.cssText='margin-top:auto;display:flex;align-items:flex-end;justify-content:space-between;padding:26px 36px 30px';
   const qrWrap=document.createElement('div'); qrWrap.style.cssText='background:#fff;padding:9px;border-radius:12px;width:138px;height:138px;display:grid;place-items:center';
