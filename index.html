@@ -1463,7 +1463,16 @@ function mobileField(m){
 function buildQR(container, m){
   if(typeof QRCode==='undefined') return;
   const tel=(mobileField(m)||{}).value||'';
-  const v='BEGIN:VCARD\nVERSION:3.0\nFN:'+displayName(m)+'\nTEL:'+String(tel).replace(/[^\d+]/g,'')+'\nORG:'+((society&&society.name)||'')+'\nEND:VCARD';
+  const esc=s=>String(s||'').replace(/([,;\\])/g,'\\$1').replace(/\n/g,' ');
+  const fn=displayName(m);
+  const sur=(surnameKey&&m[surnameKey])?String(m[surnameKey]).trim():'';
+  const given=(nameKey&&m[nameKey])?String(m[nameKey]).trim():fn;
+  // N: (structured name) is required by Android/Google Contacts — without it the scan shows ORG as the name
+  const v='BEGIN:VCARD\nVERSION:3.0\n'
+    +'N:'+esc(sur)+';'+esc(given)+';;;\n'
+    +'FN:'+esc(fn)+'\n'
+    +'TEL;TYPE=CELL:'+String(tel).replace(/[^\d+]/g,'')+'\n'
+    +'END:VCARD';
   container.innerHTML='';
   new QRCode(container,{text:v, width:120, height:120, colorDark:'#0a0908', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M});
 }
