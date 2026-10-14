@@ -12,6 +12,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root{
     --bg:#0a0908; --bg-2:#12100d; --bg-3:#1a1611; --bg-4:#221d16;
@@ -251,6 +253,14 @@
   /* ---------- Install / footer ---------- */
   .foot{margin-top:26px;text-align:center;color:var(--faint);font-size:.72rem;line-height:1.7;letter-spacing:.02em}
   .foot .made{color:var(--gold-dim)}
+  /* member photo in detail sheet */
+  .photo-area{display:flex;flex-direction:column;align-items:center;gap:9px;padding:2px 0 18px;border-bottom:1px solid var(--border);margin-bottom:8px}
+  .photo-frame{position:relative;width:112px;height:112px;border-radius:18px;overflow:hidden;border:2px solid var(--gold);background:linear-gradient(150deg,var(--gold-bright),var(--gold-dim));display:grid;place-items:center;box-shadow:0 10px 26px -12px rgba(201,168,106,.6)}
+  .photo-mono{font-family:'Cinzel',serif;font-weight:600;font-size:2.3rem;color:#241b0d}
+  .photo-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .photo-cam{position:absolute;right:-7px;bottom:-7px;width:36px;height:36px;border-radius:50%;background:var(--bg-3);border:1px solid var(--border-str);color:var(--gold);cursor:pointer;font-size:1rem;display:grid;place-items:center}
+  .photo-rm{background:none;border:none;color:var(--danger);font-size:.74rem;cursor:pointer;font-family:'DM Mono',monospace;letter-spacing:.04em}
+  .photo-hint{color:var(--faint);font-size:.74rem;font-family:'DM Mono',monospace}
   .hide{display:none !important}
   .fade{animation:fade .35s ease both}
   @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
@@ -377,6 +387,7 @@
   <div class="sbody" id="sheetBody"></div>
   <div class="sfoot" id="sheetFoot"></div>
 </div>
+<input type="file" id="photoFile" accept="image/*" class="hide"/>
 
 <!-- ============ IMPORT REVIEW SHEET ============ -->
 <div class="sheet-bg" id="importBg"></div>
@@ -1170,32 +1181,64 @@ function renderDetail(m){
   $('#d_name').textContent = displayName(m);
   $('#d_sub').textContent = displaySub(m);
   const body=$('#sheetBody'); body.innerHTML='';
-  let hidden=0;
+  body.appendChild(renderPhotoArea(m));
+  let hidden=0, shownCount=0;
   fields.forEach(f=>{
     if(f===nameKey || f===surnameKey) return; // shown in header
     const val=m[f];
     if(!val || String(val).trim()===''){ hidden++; return; } // hide empty fields
+    shownCount++;
     const shown=maybeDate(f, val);
     const kv=el('div','kv');
     const k=el('div','k'); k.textContent=f;
     const v=el('div','v'); v.textContent=shown; renderLinks(v,f,shown);
     kv.append(k,v); body.appendChild(kv);
   });
-  if(!body.children.length){
-    const e=el('div','empty'); e.style.padding='24px 10px'; e.textContent='No other details recorded — tap Edit to add.'; body.appendChild(e);
+  if(!shownCount){
+    const e=el('div','empty'); e.style.padding='18px 10px'; e.textContent='No other details recorded — tap Edit to add.'; body.appendChild(e);
   } else if(hidden){
     const n=el('div'); n.style.cssText='text-align:center;color:var(--faint);font-size:.72rem;font-family:"DM Mono",monospace;letter-spacing:.04em;padding:16px 0 4px';
     n.textContent=hidden+' empty field'+(hidden>1?'s':'')+' hidden · tap Edit to fill any';
     body.appendChild(n);
   }
   const foot=$('#sheetFoot');
-  foot.innerHTML='';
-  const editB=el('button','btn ghost grow'); editB.textContent='Edit';
-  editB.onclick=()=>renderEdit(m);
-  const delB=el('button','btn danger'); delB.textContent='Delete';
-  delB.onclick=()=>deleteMember(m.__id);
-  foot.append(editB, delB);
+  foot.innerHTML=''; foot.style.flexDirection='column';
+  const cardB=el('button','btn primary'); cardB.style.width='100%'; cardB.textContent='⬇ Membership ID card';
+  cardB.onclick=()=>makeCard(m);
+  const rowEl=el('div','row'); rowEl.style.marginTop='10px'; rowEl.style.width='100%';
+  const editB=el('button','btn ghost grow'); editB.textContent='Edit'; editB.onclick=()=>renderEdit(m);
+  const delB=el('button','btn danger'); delB.textContent='Delete'; delB.onclick=()=>deleteMember(m.__id);
+  rowEl.append(editB, delB);
+  foot.append(cardB, rowEl);
 }
+let photoTarget=null;
+function renderPhotoArea(m){
+  const wrap=el('div','photo-area');
+  const frame=el('div','photo-frame');
+  const mono=el('div','photo-mono'); mono.textContent=initials(displayName(m)); frame.appendChild(mono);
+  const img=el('img','photo-img hide'); frame.appendChild(img);
+  const cam=el('button','photo-cam'); cam.innerHTML='📷'; cam.title='Add / change photo';
+  cam.onclick=()=>{ photoTarget=m; $('#photoFile').click(); };
+  frame.appendChild(cam); wrap.appendChild(frame);
+  const hint=el('div','photo-hint'); hint.textContent='Tap the camera to add a photo'; wrap.appendChild(hint);
+  getPhoto(m).then(p=>{
+    if(p){ img.src=p; img.classList.remove('hide'); mono.classList.add('hide'); hint.remove();
+      const rm=el('button','photo-rm'); rm.textContent='Remove photo';
+      rm.onclick=async()=>{ if(!confirm('Remove this photo?')) return; await removePhoto(m); renderDetail(m); toast('Photo removed'); };
+      wrap.appendChild(rm);
+    }
+  });
+  return wrap;
+}
+if($('#photoFile')) $('#photoFile').onchange=e=>{
+  const f=e.target.files[0]; if(!f || !photoTarget) return;
+  toast('Adding photo…');
+  fileToImage(f, 640, 0.82, async url=>{
+    if(!url){ toast('Could not read that image', true); return; }
+    await setPhoto(photoTarget, url); renderDetail(photoTarget); toast('Photo added');
+  });
+  e.target.value='';
+};
 function renderLinks(v,f,val){
   const l=f.toLowerCase();
   if((l.includes('phone')||l.includes('mobile')||l.includes('contact')) && /\d{6,}/.test(val)){
@@ -1317,6 +1360,125 @@ $('#installBtn').onclick=async()=>{
 };
 $('#dismissInstall').onclick=()=>{ $('#installBar').classList.add('hide'); sessionStorage.setItem('sadasya.dismissInstall','1'); };
 window.addEventListener('appinstalled',()=>$('#installBar').classList.add('hide'));
+
+/* ============================================================
+   MEMBER PHOTOS (stored on this device in IndexedDB — big enough
+   for hundreds of photos; never in localStorage or the backup)
+   ============================================================ */
+function fileToImage(file, max, q, cb){
+  const rd=new FileReader();
+  rd.onload=()=>{ const img=new Image(); img.onload=()=>{
+    let w=img.width,h=img.height; const sc=Math.min(1, max/Math.max(w,h));
+    w=Math.max(1,Math.round(w*sc)); h=Math.max(1,Math.round(h*sc));
+    const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+    cv.getContext('2d').drawImage(img,0,0,w,h);
+    cb(cv.toDataURL('image/jpeg', q));
+  }; img.onerror=()=>cb(null); img.src=rd.result; };
+  rd.onerror=()=>cb(null); rd.readAsDataURL(file);
+}
+let _idb=null;
+function idb(){ return new Promise((res,rej)=>{ if(_idb) return res(_idb);
+  const r=indexedDB.open('sadasya',1);
+  r.onupgradeneeded=()=>{ try{ r.result.createObjectStore('kv'); }catch(e){} };
+  r.onsuccess=()=>{ _idb=r.result; res(_idb); }; r.onerror=()=>rej(r.error); }); }
+async function idbSet(k,v){ try{ const d=await idb(); return new Promise(res=>{ const t=d.transaction('kv','readwrite'); t.objectStore('kv').put(v,k); t.oncomplete=()=>res(); t.onerror=()=>res(); }); }catch(e){} }
+async function idbGet(k){ try{ const d=await idb(); return new Promise(res=>{ const t=d.transaction('kv','readonly'); const rq=t.objectStore('kv').get(k); rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>res(null); }); }catch(e){ return null; } }
+async function idbDel(k){ try{ const d=await idb(); return new Promise(res=>{ const t=d.transaction('kv','readwrite'); t.objectStore('kv').delete(k); t.oncomplete=()=>res(); t.onerror=()=>res(); }); }catch(e){} }
+async function getPhoto(m){ return await idbGet('photo:'+m.__id); }
+async function setPhoto(m,url){ await idbSet('photo:'+m.__id,url); m.photo=true; save(); }
+async function removePhoto(m){ await idbDel('photo:'+m.__id); delete m.photo; save(); }
+
+/* ============================================================
+   ID CARD — elegant membership card, saved/shared as PNG
+   ============================================================ */
+function societyLogo(){ return (society&&society.logo) || (typeof DEFAULT_SOCIETY!=='undefined' && DEFAULT_SOCIETY.logo) || ''; }
+function cardField(m, regexes){
+  for(const rx of regexes){ const f=fields.find(h=>rx.test(String(h).toLowerCase())); if(f && m[f] && String(m[f]).trim()) return {label:f, value:maybeDate(f, m[f])}; }
+  return null;
+}
+function buildQR(container, m){
+  if(typeof QRCode==='undefined') return;
+  const tel=(cardField(m,[/mobile\s*no\s*1/,/mobile/,/phone/,/contact/])||{}).value||'';
+  const v='BEGIN:VCARD\nVERSION:3.0\nFN:'+displayName(m)+'\nTEL:'+String(tel).replace(/[^\d+]/g,'')+'\nORG:'+((society&&society.name)||'')+'\nEND:VCARD';
+  container.innerHTML='';
+  new QRCode(container,{text:v, width:120, height:120, colorDark:'#0a0908', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M});
+}
+function buildCardNode(m, photo){
+  const GOLD='#c9a86a', GOLDB='#e4c88d', TXT='#efe7d7', MUT='#9a8f7c', DIM='#6f6757';
+  const wrap=document.createElement('div');
+  wrap.style.cssText='position:fixed;left:-9999px;top:0;width:680px;height:1080px;box-sizing:border-box;background:linear-gradient(170deg,#12100b,#0a0908 60%);border:2px solid '+GOLD+';border-radius:30px;overflow:hidden;font-family:\'DM Sans\',sans-serif;color:'+TXT+';display:flex;flex-direction:column;';
+  const glow=document.createElement('div'); glow.style.cssText='position:absolute;top:-120px;right:-120px;width:360px;height:360px;border-radius:50%;background:radial-gradient(circle,rgba(201,168,106,.18),transparent 70%)'; wrap.appendChild(glow);
+  const head=document.createElement('div'); head.style.cssText='display:flex;align-items:center;gap:16px;padding:32px 36px 18px';
+  const logo=societyLogo();
+  if(logo){ const lg=document.createElement('img'); lg.src=logo; lg.style.cssText='width:74px;height:74px;border-radius:16px;object-fit:cover;border:2px solid rgba(201,168,106,.55);box-shadow:0 6px 18px -8px rgba(201,168,106,.6)'; head.appendChild(lg); }
+  const htxt=document.createElement('div'); htxt.style.cssText='flex:1;min-width:0';
+  htxt.innerHTML='<div style="font-family:\'Cinzel\',serif;font-weight:700;font-size:21px;line-height:1.15;color:'+GOLDB+'">'+((society&&society.name)||'Membership')+'</div>'
+    +'<div style="font-family:\'DM Mono\',monospace;font-size:11px;letter-spacing:4px;color:'+MUT+';margin-top:7px">MEMBERSHIP CARD</div>';
+  head.appendChild(htxt); wrap.appendChild(head);
+  const rule=document.createElement('div'); rule.style.cssText='height:1px;margin:0 36px;background:linear-gradient(90deg,transparent,rgba(201,168,106,.5),transparent)'; wrap.appendChild(rule);
+  const pf=document.createElement('div'); pf.style.cssText='width:230px;height:230px;margin:30px auto 0;border-radius:26px;overflow:hidden;border:3px solid '+GOLD+';box-shadow:0 14px 34px -14px rgba(201,168,106,.6);display:grid;place-items:center;background:linear-gradient(150deg,'+GOLDB+','+DIM+')';
+  if(photo){ const im=document.createElement('img'); im.src=photo; im.style.cssText='width:100%;height:100%;object-fit:cover'; pf.appendChild(im); }
+  else { const mo=document.createElement('div'); mo.textContent=initials(displayName(m)); mo.style.cssText='font-family:\'Cinzel\',serif;font-weight:600;font-size:76px;color:#241b0d'; pf.appendChild(mo); }
+  wrap.appendChild(pf);
+  const nm=document.createElement('div'); nm.textContent=displayName(m);
+  nm.style.cssText='font-family:\'Cinzel\',serif;font-weight:600;font-size:30px;text-align:center;color:'+TXT+';padding:22px 36px 0;line-height:1.2';
+  wrap.appendChild(nm);
+  const badges=document.createElement('div'); badges.style.cssText='display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:16px;padding:0 36px';
+  const no=cardField(m,[/^sl\.?\s*no/,/member\s*no/,/^s\.?\s*no/,/^id$/]);
+  const cat=cardField(m,[/category/,/type/,/membership/]);
+  const pill=(t)=>{ const p=document.createElement('div'); p.textContent=t; p.style.cssText='font-family:\'DM Mono\',monospace;font-size:13px;letter-spacing:.5px;color:'+GOLDB+';background:rgba(201,168,106,.1);border:1px solid rgba(201,168,106,.35);padding:7px 14px;border-radius:999px'; return p; };
+  if(no) badges.appendChild(pill('No. '+no.value));
+  if(cat) badges.appendChild(pill(cat.value));
+  wrap.appendChild(badges);
+  const det=document.createElement('div'); det.style.cssText='margin:24px 48px 0;display:flex;flex-direction:column;gap:12px';
+  const addRow=(label,val)=>{ if(!val) return; const r=document.createElement('div'); r.style.cssText='display:flex;justify-content:space-between;gap:16px;border-bottom:1px solid rgba(201,168,106,.14);padding-bottom:11px';
+    r.innerHTML='<span style="font-family:\'DM Mono\',monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:'+MUT+'">'+label+'</span><span style="font-size:15px;color:'+TXT+';text-align:right">'+val+'</span>'; det.appendChild(r); };
+  const mob=cardField(m,[/mobile\s*no\s*1/,/mobile/,/phone/,/contact/]);
+  const place=cardField(m,[/place/,/area/,/city/,/village/]);
+  if(mob) addRow('Mobile', mob.value);
+  if(place) addRow(place.label.length<16?place.label:'Place', place.value);
+  wrap.appendChild(det);
+  const foot=document.createElement('div'); foot.style.cssText='margin-top:auto;display:flex;align-items:flex-end;justify-content:space-between;padding:26px 36px 30px';
+  const qrWrap=document.createElement('div'); qrWrap.style.cssText='background:#fff;padding:9px;border-radius:12px;width:138px;height:138px;display:grid;place-items:center';
+  const qr=document.createElement('div'); qr.id='cardqr'; qrWrap.appendChild(qr); foot.appendChild(qrWrap);
+  const fr=document.createElement('div'); fr.style.cssText='text-align:right';
+  fr.innerHTML=(society&&society.reg?('<div style="font-family:\'DM Mono\',monospace;font-size:12px;color:'+GOLDB+'">Reg. No. '+society.reg+'</div>'):'')
+    +'<div style="font-family:\'DM Mono\',monospace;font-size:10px;letter-spacing:2px;color:'+DIM+';margin-top:8px">ISSUED '+new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}).toUpperCase()+'</div>'
+    +'<div style="font-family:\'Cinzel\',serif;font-size:13px;letter-spacing:3px;color:'+MUT+';margin-top:10px">SADASYA</div>';
+  foot.appendChild(fr); wrap.appendChild(foot);
+  return wrap;
+}
+function showCardResult(blob, m){
+  const url=URL.createObjectURL(blob);
+  const bg=el('div'); bg.style.cssText='position:fixed;inset:0;z-index:95;background:rgba(4,3,2,.92);backdrop-filter:blur(5px);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:22px;gap:16px';
+  const img=el('img'); img.src=url; img.style.cssText='max-width:90%;max-height:66vh;border-radius:16px;box-shadow:0 22px 60px -10px #000';
+  const hint=el('div'); hint.style.cssText='color:#c9a86a;font-family:"DM Mono",monospace;font-size:.74rem;text-align:center;letter-spacing:.03em;line-height:1.5'; hint.textContent='Tap Share / Save below — or long-press the image to save it';
+  const row=el('div'); row.style.cssText='display:flex;gap:12px;flex-wrap:wrap;justify-content:center';
+  const fname=(displayName(m).replace(/[^\w]+/g,'_')||'member')+'_card.png';
+  const shareB=el('button','btn primary'); shareB.textContent='Share / Save';
+  shareB.onclick=async()=>{
+    try{ const file=new File([blob], fname, {type:'image/png'});
+      if(navigator.canShare && navigator.canShare({files:[file]})){ await navigator.share({files:[file], title:'Membership Card', text:displayName(m)}); return; } }catch(e){}
+    const a=document.createElement('a'); a.href=url; a.download=fname; document.body.appendChild(a); a.click(); a.remove();
+  };
+  const closeB=el('button','btn ghost'); closeB.textContent='Close'; closeB.onclick=()=>{ URL.revokeObjectURL(url); bg.remove(); };
+  bg.onclick=(e)=>{ if(e.target===bg){ URL.revokeObjectURL(url); bg.remove(); } };
+  row.append(shareB, closeB); bg.append(img, hint, row); document.body.appendChild(bg);
+}
+async function makeCard(m){
+  if(typeof html2canvas==='undefined'){ toast('Card tool still loading — try again in a moment', true); return; }
+  toast('Preparing card…');
+  const photo=await getPhoto(m);
+  const node=buildCardNode(m, photo);
+  document.body.appendChild(node);
+  try{ buildQR(node.querySelector('#cardqr'), m); }catch(e){}
+  await new Promise(r=>setTimeout(r,160));
+  try{
+    const canvas=await html2canvas(node,{backgroundColor:null, scale:2, useCORS:true, logging:false});
+    node.remove();
+    canvas.toBlob(blob=>{ if(!blob){ toast('Could not generate the card', true); return; } showCardResult(blob, m); }, 'image/png');
+  }catch(e){ console.error(e); node.remove(); toast('Could not generate the card', true); }
+}
 
 /* ---------- go ---------- */
 route();
