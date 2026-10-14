@@ -1454,6 +1454,11 @@ function buildCardNode(m, photo){
   if(mob) addRow('Mobile', mob.value);
   if(place) addRow(place.label.length<16?place.label:'Place', place.value);
   wrap.appendChild(det);
+  if(society&&society.addr){
+    const adWrap=document.createElement('div'); adWrap.style.cssText='margin:20px 40px 0;padding-top:16px;border-top:1px solid rgba(201,168,106,.14);text-align:center';
+    adWrap.innerHTML='<div style="font-family:\'DM Mono\',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:'+DIM+';margin-bottom:6px">Sangham Address</div><div style="font-size:12.5px;line-height:1.5;color:'+MUT+'">'+society.addr+'</div>';
+    wrap.appendChild(adWrap);
+  }
   const foot=document.createElement('div'); foot.style.cssText='margin-top:auto;display:flex;align-items:flex-end;justify-content:space-between;padding:26px 36px 30px';
   const qrWrap=document.createElement('div'); qrWrap.style.cssText='background:#fff;padding:9px;border-radius:12px;width:138px;height:138px;display:grid;place-items:center';
   const qr=document.createElement('div'); qr.id='cardqr'; qrWrap.appendChild(qr); foot.appendChild(qrWrap);
